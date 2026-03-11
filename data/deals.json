@@ -1,0 +1,22 @@
+{
+  "1": {
+    "seller_id": 8133917737,
+    "product": "kakaka",
+    "price": 100.0,
+    "currency": "usdt",
+    "currency_label": "USDT",
+    "paid": false,
+    "payment_details": "не указан — укажите реквизиты в разделе 💳 Реквизиты"
+  },
+  "2": {
+    "seller_id": 8133917737,
+    "product": "kjha",
+    "price": 100.0,
+    "currency": "usdt",
+    "currency_label": "USDT",
+    "paid": true,
+    "payment_details": "не указан — укажите реквизиты в разделе 💳 Реквизиты",
+    "buyer_id": 6294876402,
+    "gift_confirmed": true
+  }
+}
