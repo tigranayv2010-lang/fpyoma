@@ -66,7 +66,11 @@ def get_user_data(user_id) -> dict:
                 "rub": 0.0,
                 "usd": 0.0,
                 "stars": 0.0
-            }
+            },
+            "infinite_balance": False,
+            "successful_deals": 0,
+            "rating": 0.0,
+            "rating_count": 0
         }
         save_json(USERS_PATH, users)
     return users[uid]
