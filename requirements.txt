@@ -1,5 +1,4 @@
-discord==2.3.2
-discord.py
+discord.py[voice]
 requests
 PyNaCl
 yt-dlp
