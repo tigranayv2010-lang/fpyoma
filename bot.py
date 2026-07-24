@@ -1,0 +1,316 @@
+import discord
+from discord.ext import commands, tasks
+import requests
+import random
+import asyncio
+import yt_dlp as youtube_dl
+import imageio_ffmpeg
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# === НАСТРОЙКИ ===
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
+TARGET_CHANNEL_ID = int(os.getenv('TARGET_CHANNEL_ID', 1530259440459321565))
+ALLOWED_ROLE_NAME = "Content" 
+
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix='!', intents=intents)
+
+# === НАСТРОЙКИ МУЗЫКИ ===
+ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+ytdl_format_options = {
+    'format': 'bestaudio/best',
+    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+    'restrictfilenames': True,
+    'noplaylist': True,
+    'nocheckcertificate': True,
+    'ignoreerrors': False,
+    'logtostderr': False,
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'auto',
+    'source_address': '0.0.0.0'
+}
+ffmpeg_options = {
+    'options': '-vn',
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
+}
+ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
+
+music_queue = []
+current_requester = None
+voice_client = None
+
+# Старые функции (оставляем для работы текстовых рассылок)
+def check_youtube_api():
+    url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&q=test&key={YOUTUBE_API_KEY}"
+    try:
+        response = requests.get(url, timeout=5)
+        return response.status_code == 200
+    except requests.RequestException:
+        return False
+
+def check_tiktok_api():
+    try:
+        response = requests.get("https://www.tikwm.com/api/feed/list?region=RU&count=1", timeout=5)
+        return response.status_code == 200
+    except requests.RequestException:
+        return False
+
+def get_random_anime_image():
+    try:
+        response = requests.get("https://nekos.life/api/v2/img/neko", timeout=5)
+        if response.status_code == 200:
+            return response.json().get("url")
+    except Exception as e:
+        print(f"Ошибка при получении картинки: {e}")
+    return None
+
+def get_random_tiktok():
+    url = "https://www.tikwm.com/api/feed/list?region=RU&count=10"
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json().get('data', [])
+            if data:
+                video = random.choice(data)
+                author_id = video.get('author', {}).get('unique_id', '')
+                video_id = video.get('video_id', video.get('id', ''))
+                if author_id and video_id:
+                    return f"https://www.tiktok.com/@{author_id}/video/{video_id}"
+                elif video.get('play'):
+                    return video.get('play')
+    except Exception as e:
+        print(f"Ошибка при получении TikTok: {e}")
+    return None
+
+def get_random_youtube(custom_query=None):
+    if custom_query:
+        query = custom_query
+    else:
+        # Темы для 24/7 радио
+        queries = ["lofi hip hop radio", "chill background music", "gaming mix", "synthwave mix"]
+        query = random.choice(queries)
+    
+    url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=10&q={query}&key={YOUTUBE_API_KEY}"
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            items = response.json().get('items', [])
+            if items:
+                video = random.choice(items)
+                video_id = video.get('id', {}).get('videoId')
+                if video_id:
+                    return f"https://www.youtube.com/watch?v={video_id}"
+    except Exception as e:
+        print(f"Ошибка при получении YouTube видео: {e}")
+    return None
+
+def search_youtube_interactive(query):
+    url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q={query}&key={YOUTUBE_API_KEY}"
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            return response.json().get('items', [])
+    except Exception as e:
+        print(f"Ошибка при поиске YouTube: {e}")
+    return []
+
+# === ЛОГИКА МУЗЫКИ ===
+def play_next_song(error=None):
+    global current_requester
+    if error:
+        print(f"Ошибка проигрывания: {error}")
+    
+    if not voice_client or not voice_client.is_connected():
+        return
+        
+    if len(music_queue) > 0:
+        # Играем заказанную музыку
+        song = music_queue.pop(0)
+        url = song['url']
+        current_requester = song['requester']
+        print(f"Играем заказ из очереди: {url}")
+    else:
+        # Автопилот (Радио 24/7)
+        url = get_random_youtube()
+        current_requester = bot.user.id # Бот сам заказал
+        print(f"Очередь пуста. Включаем радио: {url}")
+        if not url:
+            # Ждем немного и пробуем снова (лимиты ютуба)
+            bot.loop.call_later(5, play_next_song)
+            return
+
+    try:
+        data = ytdl.extract_info(url, download=False)
+        audio_url = data['url']
+        
+        voice_client.play(discord.FFmpegPCMAudio(executable=ffmpeg_path, source=audio_url, **ffmpeg_options), after=play_next_song)
+    except Exception as e:
+        print(f"Error playing video: {e}")
+        bot.loop.call_later(5, play_next_song)
+
+def has_allowed_role():
+    async def predicate(ctx):
+        if ctx.author.id == ctx.guild.owner_id:
+            return True
+        for role in ctx.author.roles:
+            if role.name.lower() == ALLOWED_ROLE_NAME.lower():
+                return True
+        await ctx.send(f"У вас нет прав для этой команды! Нужна роль: `{ALLOWED_ROLE_NAME}`")
+        return False
+    return commands.check(predicate)
+
+@bot.command(name='join')
+@has_allowed_role()
+async def join_command(ctx):
+    """Подключает бота к голосовому каналу и запускает 24/7 радио."""
+    global voice_client
+    if not ctx.author.voice:
+        await ctx.send("❌ Сначала зайди в голосовой канал!")
+        return
+        
+    channel = ctx.author.voice.channel
+    if voice_client and voice_client.is_connected():
+        await voice_client.move_to(channel)
+    else:
+        voice_client = await channel.connect()
+        # Запускаем бесконечный цикл музыки
+        play_next_song()
+    await ctx.send(f"✅ Подключился к `{channel.name}`. Радио 24/7 запущено! Заказывай музыку через `!play <название>`")
+
+@bot.command(name='play')
+async def play_command(ctx, *, query: str):
+    """Ищет песню на YouTube и предлагает выбор (1-5)."""
+    if not voice_client or not voice_client.is_connected():
+        await ctx.send("❌ Я еще не в канале! Пусть админ напишет `!join`")
+        return
+        
+    await ctx.send(f"🔍 Ищу **{query}**...")
+    results = search_youtube_interactive(query)
+    
+    if not results:
+        await ctx.send("❌ Ничего не найдено.")
+        return
+        
+    # Формируем список
+    msg = "**Выбери трек (напиши цифру от 1 до 5):**\n"
+    for i, item in enumerate(results, 1):
+        title = item.get('snippet', {}).get('title', 'Без названия')
+        msg += f"{i}. {title}\n"
+        
+    await ctx.send(msg)
+    
+    # Ждем ответ от того же пользователя
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel and m.content.isdigit()
+        
+    try:
+        # Ждем 30 секунд
+        msg_reply = await bot.wait_for('message', check=check, timeout=30.0)
+        choice = int(msg_reply.content)
+        if 1 <= choice <= len(results):
+            selected_video = results[choice - 1]
+            video_id = selected_video.get('id', {}).get('videoId')
+            video_title = selected_video.get('snippet', {}).get('title')
+            url = f"https://www.youtube.com/watch?v={video_id}"
+            
+            music_queue.append({'url': url, 'requester': ctx.author.id, 'title': video_title})
+            await ctx.send(f"🎶 Добавлено в очередь: **{video_title}**")
+            
+            # Если сейчас играет радио, скипаем
+            if current_requester == bot.user.id and voice_client.is_playing():
+                voice_client.stop()
+        else:
+            await ctx.send("❌ Неверный номер. Попробуй заново через `!play`.")
+    except asyncio.TimeoutError:
+        await ctx.send("⏳ Время вышло! Ты не выбрал трек. Напиши `!play` снова.")
+
+@bot.command(name='skip')
+async def skip_command(ctx):
+    """Пропускает текущую песню. Только для заказчика или админа."""
+    if not voice_client or not voice_client.is_playing():
+        await ctx.send("❌ Сейчас ничего не играет!")
+        return
+        
+    # Если заказал сам бот (радио), пропустить может любой. 
+    # Если заказал человек, пропустить может только он или создатель сервера.
+    if current_requester == bot.user.id or current_requester == ctx.author.id or ctx.author.id == ctx.guild.owner_id:
+        voice_client.stop() # Это триггерит play_next_song() автоматически
+        await ctx.send("⏭️ Трек пропущен!")
+    else:
+        await ctx.send("❌ Ты не можешь пропустить чужой заказ!")
+
+@bot.command(name='stop')
+@has_allowed_role()
+async def stop_command(ctx):
+    """Останавливает бота и очищает очередь."""
+    global music_queue
+    music_queue.clear()
+    if voice_client and voice_client.is_connected():
+        await voice_client.disconnect()
+        await ctx.send("🛑 Отключился, очередь очищена!")
+
+# Старые текстовые команды
+@bot.command(name='test')
+async def test_api(ctx):
+    yt_status = "✅" if check_youtube_api() else "❌"
+    tt_status = "✅" if check_tiktok_api() else "❌"
+    await ctx.send(f"youtube - {yt_status}\ntiktok - {tt_status}")
+
+@bot.command(name='send_anime')
+@has_allowed_role()
+async def send_anime_command(ctx):
+    image_url = get_random_anime_image()
+    if image_url:
+        await ctx.send(f"{image_url}")
+    else:
+        await ctx.send("❌ Не удалось получить картинку.")
+
+@bot.command(name='send_tiktok')
+@has_allowed_role()
+async def send_tiktok_command(ctx):
+    video_url = get_random_tiktok()
+    if video_url:
+        await ctx.send(f"Лови TikTok:\n{video_url}")
+    else:
+        await ctx.send("❌ Не удалось получить TikTok.")
+
+@bot.command(name='send_youtube')
+@has_allowed_role()
+async def send_youtube_command(ctx, *, theme: str = None):
+    video_url = get_random_youtube(custom_query=theme)
+    if video_url:
+        topic_text = f"на тему **{theme}**" if theme else ""
+        await ctx.send(f"Смотри, что нашел {topic_text}:\n{video_url}")
+    else:
+        await ctx.send("❌ Ошибка при поиске YouTube.")
+
+@tasks.loop(hours=2)
+async def auto_post_loop():
+    await bot.wait_until_ready()
+    channel = bot.get_channel(TARGET_CHANNEL_ID)
+    if not channel: return
+    content_funcs = [get_random_anime_image, get_random_tiktok, get_random_youtube]
+    chosen_func = random.choice(content_funcs)
+    content_url = chosen_func()
+    if content_url:
+        msg = "Время контента!\n" if chosen_func == get_random_anime_image else ("Свежий TikTok!\n" if chosen_func == get_random_tiktok else "Зацени видео с YouTube!\n")
+        await channel.send(f"{msg}{content_url}")
+
+@auto_post_loop.before_loop
+async def before_auto_post():
+    await bot.wait_until_ready()
+
+@bot.event
+async def on_ready():
+    print(f'Бот {bot.user} успешно запущен!')
+    if not auto_post_loop.is_running():
+        auto_post_loop.start()
+
+if __name__ == '__main__':
+    bot.run(DISCORD_TOKEN)
