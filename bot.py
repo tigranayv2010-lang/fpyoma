@@ -149,7 +149,10 @@ def play_next_song(error=None):
         data = ytdl.extract_info(url, download=False)
         audio_url = data['url']
         
-        voice_client.play(discord.FFmpegPCMAudio(executable=ffmpeg_path, source=audio_url, **ffmpeg_options), after=play_next_song)
+        def after_playing(e):
+            bot.loop.call_soon_threadsafe(play_next_song, e)
+            
+        voice_client.play(discord.FFmpegPCMAudio(executable=ffmpeg_path, source=audio_url, **ffmpeg_options), after=after_playing)
     except Exception as e:
         print(f"Error playing video: {e}")
         bot.loop.call_later(5, play_next_song)
