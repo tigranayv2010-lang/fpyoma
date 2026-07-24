@@ -1,2 +1,7 @@
 discord==2.3.2
-requests==2.31.0
+discord.py
+requests
+PyNaCl
+yt-dlp
+imageio-ffmpeg
+python-dotenv
