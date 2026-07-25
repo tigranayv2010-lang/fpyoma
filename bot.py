@@ -125,7 +125,7 @@ def get_random_youtube(custom_query=None):
     if custom_query:
         query = custom_query
     else:
-        # Темы для 24/7 радио
+        # Темы для YouTube
         queries = get_saved_topics()
         if not queries:
             queries = ["lofi hip hop radio", "chill background music", "gaming mix", "synthwave mix"]
@@ -171,10 +171,10 @@ def play_next_song(error=None):
         current_requester = song['requester']
         print(f"Играем заказ из очереди: {url}")
     else:
-        # Автопилот (Радио 24/7)
+        # Автопилот (Фоновая музыка)
         url = get_random_youtube()
         current_requester = bot.user.id # Бот сам заказал
-        print(f"Очередь пуста. Включаем радио: {url}")
+        print(f"Очередь пуста. Включаем фоновую музыку: {url}")
         if not url:
             # Ждем немного и пробуем снова (лимиты ютуба)
             bot.loop.call_later(5, play_next_song)
@@ -203,68 +203,77 @@ def has_allowed_role():
         return False
     return commands.check(predicate)
 
-@bot.tree.command(name="set_topics", description="Задать список тем для фонового радио (через запятую)")
-@discord.app_commands.describe(topics="Список тем через запятую (например: lofi, rock, jazz)")
-async def set_topics_command(interaction: discord.Interaction, topics: str):
-    is_allowed = False
-    if interaction.user.id == interaction.guild.owner_id:
-        is_allowed = True
-    else:
-        for role in getattr(interaction.user, 'roles', []):
-            if role.name.lower() == ALLOWED_ROLE_NAME.lower():
-                is_allowed = True
-                break
-                
-    if not is_allowed:
-        await interaction.response.send_message(f"У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`", ephemeral=True)
-        return
+class TopicModal(discord.ui.Modal):
+    def __init__(self, platform: str):
+        super().__init__(title=f"Темы для {platform}")
+        self.platform = platform
         
-    topics_list = [t.strip() for t in topics.split(',') if t.strip()]
-    if not topics_list:
-        await interaction.response.send_message("Вы не указали ни одной темы!", ephemeral=True)
-        return
+        current_topics = get_saved_topics() if platform == "YouTube" else get_saved_tiktok_topics()
+        default_val = ", ".join(current_topics)
         
-    save_topics(topics_list)
-    await interaction.response.send_message(f"Темы для радио обновлены!\nНовые темы: **{', '.join(topics_list)}**")
+        self.topics_input = discord.ui.TextInput(
+            label="Темы (через запятую)",
+            style=discord.TextStyle.paragraph,
+            placeholder="Например: cats, funny, phonk",
+            default=default_val,
+            required=True
+        )
+        self.add_item(self.topics_input)
 
-@bot.tree.command(name="set_tiktok_topics", description="Задать список тем для TikTok (через запятую)")
-@discord.app_commands.describe(topics="Список тем через запятую (например: cats, funny, phonk)")
-async def set_tiktok_topics_command(interaction: discord.Interaction, topics: str):
-    is_allowed = False
-    if interaction.user.id == interaction.guild.owner_id:
-        is_allowed = True
-    else:
-        for role in getattr(interaction.user, 'roles', []):
-            if role.name.lower() == ALLOWED_ROLE_NAME.lower():
-                is_allowed = True
-                break
-                
-    if not is_allowed:
-        await interaction.response.send_message(f"У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`", ephemeral=True)
-        return
+    async def on_submit(self, interaction: discord.Interaction):
+        topics_str = self.topics_input.value
+        topics_list = [t.strip() for t in topics_str.split(',') if t.strip()]
         
-    topics_list = [t.strip() for t in topics.split(',') if t.strip()]
-    if not topics_list:
-        await interaction.response.send_message("Вы не указали ни одной темы!", ephemeral=True)
-        return
-        
-    save_tiktok_topics(topics_list)
-    await interaction.response.send_message(f"Темы для TikTok обновлены!\nНовые темы: **{', '.join(topics_list)}**")
+        if self.platform == "YouTube":
+            save_topics(topics_list)
+        else:
+            save_tiktok_topics(topics_list)
+            
+        await interaction.response.send_message(f"Темы для {self.platform} обновлены!\nНовые темы: **{', '.join(topics_list)}**", ephemeral=False)
 
-@bot.tree.command(name="show_topics", description="Показать текущие темы для YouTube и TikTok")
-async def show_topics_command(interaction: discord.Interaction):
+class TopicView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        is_allowed = False
+        if interaction.user.id == interaction.guild.owner_id:
+            is_allowed = True
+        else:
+            for role in getattr(interaction.user, 'roles', []):
+                if role.name.lower() == ALLOWED_ROLE_NAME.lower():
+                    is_allowed = True
+                    break
+        if not is_allowed:
+            await interaction.response.send_message(f"У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="YouTube", style=discord.ButtonStyle.primary, custom_id="btn_yt")
+    async def btn_yt(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(TopicModal("YouTube"))
+
+    @discord.ui.button(label="TikTok", style=discord.ButtonStyle.success, custom_id="btn_tk")
+    async def btn_tk(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(TopicModal("TikTok"))
+
+@bot.tree.command(name="topics", description="Настройка тем для контента")
+async def topics_command(interaction: discord.Interaction):
     yt_topics = get_saved_topics()
     tk_topics = get_saved_tiktok_topics()
     
     yt_text = ", ".join(yt_topics) if yt_topics else "По умолчанию (lofi, chill, gaming, synthwave)"
     tk_text = ", ".join(tk_topics) if tk_topics else "По умолчанию (лента без поиска)"
     
-    await interaction.response.send_message(f"**Текущие темы контента:**\n\n📺 **YouTube (Радио 24/7):** {yt_text}\n📱 **TikTok:** {tk_text}")
+    await interaction.response.send_message(
+        f"**Текущие темы контента:**\n\n📺 **YouTube:** {yt_text}\n📱 **TikTok:** {tk_text}\n\nНажмите на кнопку ниже, чтобы изменить темы:",
+        view=TopicView()
+    )
 
 @bot.command(name='join')
 @has_allowed_role()
 async def join_command(ctx):
-    """Подключает бота к голосовому каналу и запускает 24/7 радио."""
+    """Подключает бота к голосовому каналу и запускает фоновую музыку."""
     global voice_client
     if not ctx.author.voice:
         await ctx.send("Сначала зайди в голосовой канал!")
@@ -277,7 +286,7 @@ async def join_command(ctx):
         voice_client = await channel.connect()
         # Запускаем бесконечный цикл музыки
         play_next_song()
-    await ctx.send(f"Подключился к `{channel.name}`. Радио 24/7 запущено! Заказывай музыку через `!play <название>`")
+    await ctx.send(f"Подключился к `{channel.name}`. Фоновая музыка запущена! Заказывай музыку через `!play <название>`")
 
 @bot.command(name='play')
 async def play_command(ctx, *, query: str):
@@ -318,7 +327,7 @@ async def play_command(ctx, *, query: str):
             music_queue.append({'url': url, 'requester': ctx.author.id, 'title': video_title})
             await ctx.send(f"Добавлено в очередь: **{video_title}**")
             
-            # Если сейчас играет радио, скипаем
+            # Если сейчас играет фоновая музыка, скипаем
             if current_requester == bot.user.id and voice_client.is_playing():
                 voice_client.stop()
         else:
@@ -333,7 +342,7 @@ async def skip_command(ctx):
         await ctx.send("Сейчас ничего не играет!")
         return
         
-    # Если заказал сам бот (радио), пропустить может любой. 
+    # Если заказал сам бот (фоновая музыка), пропустить может любой. 
     # Если заказал человек, пропустить может только он или создатель сервера.
     if current_requester == bot.user.id or current_requester == ctx.author.id or ctx.author.id == ctx.guild.owner_id:
         voice_client.stop() # Это триггерит play_next_song() автоматически
