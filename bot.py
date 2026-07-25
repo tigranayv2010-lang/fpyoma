@@ -58,6 +58,18 @@ def save_topics(topics_list):
     with open('topics.json', 'w', encoding='utf-8') as f:
         json.dump({'topics': topics_list}, f, ensure_ascii=False, indent=4)
 
+def get_saved_tiktok_topics():
+    try:
+        with open('tiktok_topics.json', 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data.get('topics', [])
+    except FileNotFoundError:
+        return []
+
+def save_tiktok_topics(topics_list):
+    with open('tiktok_topics.json', 'w', encoding='utf-8') as f:
+        json.dump({'topics': topics_list}, f, ensure_ascii=False, indent=4)
+
 # Старые функции (оставляем для работы текстовых рассылок)
 def check_youtube_api():
     url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&q=test&key={YOUTUBE_API_KEY}"
@@ -84,11 +96,19 @@ def get_random_anime_image():
     return None
 
 def get_random_tiktok():
-    url = "https://www.tikwm.com/api/feed/list?region=RU&count=10"
+    topics = get_saved_tiktok_topics()
+    if topics:
+        query = random.choice(topics)
+        url = f"https://www.tikwm.com/api/feed/search?keywords={query}&count=10"
+    else:
+        url = "https://www.tikwm.com/api/feed/list?region=RU&count=10"
+        
     try:
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json().get('data', [])
+            if isinstance(data, dict):
+                data = data.get('videos', [])
             if data:
                 video = random.choice(data)
                 author_id = video.get('author', {}).get('unique_id', '')
@@ -206,6 +226,30 @@ async def set_topics_command(interaction: discord.Interaction, topics: str):
         
     save_topics(topics_list)
     await interaction.response.send_message(f"Темы для радио обновлены!\nНовые темы: **{', '.join(topics_list)}**")
+
+@bot.tree.command(name="set_tiktok_topics", description="Задать список тем для TikTok (через запятую)")
+@discord.app_commands.describe(topics="Список тем через запятую (например: cats, funny, phonk)")
+async def set_tiktok_topics_command(interaction: discord.Interaction, topics: str):
+    is_allowed = False
+    if interaction.user.id == interaction.guild.owner_id:
+        is_allowed = True
+    else:
+        for role in getattr(interaction.user, 'roles', []):
+            if role.name.lower() == ALLOWED_ROLE_NAME.lower():
+                is_allowed = True
+                break
+                
+    if not is_allowed:
+        await interaction.response.send_message(f"У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`", ephemeral=True)
+        return
+        
+    topics_list = [t.strip() for t in topics.split(',') if t.strip()]
+    if not topics_list:
+        await interaction.response.send_message("Вы не указали ни одной темы!", ephemeral=True)
+        return
+        
+    save_tiktok_topics(topics_list)
+    await interaction.response.send_message(f"Темы для TikTok обновлены!\nНовые темы: **{', '.join(topics_list)}**")
 
 @bot.command(name='join')
 @has_allowed_role()
