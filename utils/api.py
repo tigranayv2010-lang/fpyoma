@@ -36,14 +36,16 @@ def get_random_tiktok(query: str = None) -> dict:
                     "url": f"https://www.tiktok.com/@{author}/video/{vid_id}",
                     "topic": topic,
                     "title": video.get("title"),
-                    "thumbnail": video.get("cover")
+                    "thumbnail": video.get("cover"),
+                    "download_url": video.get("play")
                 }
             elif video.get('play'):
                 return {
                     "url": video.get('play'),
                     "topic": topic,
                     "title": video.get("title"),
-                    "thumbnail": video.get("cover")
+                    "thumbnail": video.get("cover"),
+                    "download_url": video.get("play")
                 }
     except Exception as e:
         print(f"Ошибка получения TikTok: {e}")

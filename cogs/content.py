@@ -117,7 +117,29 @@ class TopicSelect(discord.ui.Select):
         if thumb:
             embed.set_thumbnail(url=thumb)
             
-        await channel.send(embed=embed)
+        download_url = data.get("download_url")
+        file_attachment = None
+        
+        if download_url:
+            import aiohttp
+            import io
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(download_url) as resp:
+                        if resp.status == 200:
+                            video_bytes = await resp.read()
+                            if len(video_bytes) < 25 * 1024 * 1024:  # 25 MB limit
+                                file_attachment = discord.File(fp=io.BytesIO(video_bytes), filename="video.mp4")
+                                # If we successfully downloaded the video, we can remove the video link from the description to make it cleaner
+                                embed.description = f"**Тема:** {topic}"
+            except Exception as e:
+                print(f"Ошибка загрузки видеофайла: {e}")
+                
+        if file_attachment:
+            await channel.send(embed=embed, file=file_attachment)
+        else:
+            await channel.send(embed=embed)
+            
         try:
             await interaction.delete_original_response()
         except discord.errors.HTTPException:
@@ -225,7 +247,26 @@ async def auto_post_loop(bot_instance):
         embed = create_embed(title=embed_title, description=f"**Тема:** {topic}\n\n[▶ Открыть YouTube]({url})\n\n{url}", theme="youtube")
         if thumb: embed.set_thumbnail(url=thumb)
         
-    await target_channel.send(embed=embed)
+    download_url = data.get("download_url")
+    file_attachment = None
+    if download_url:
+        import aiohttp
+        import io
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(download_url) as resp:
+                    if resp.status == 200:
+                        video_bytes = await resp.read()
+                        if len(video_bytes) < 25 * 1024 * 1024:
+                            file_attachment = discord.File(fp=io.BytesIO(video_bytes), filename="video.mp4")
+                            embed.description = f"**Тема:** {topic}"
+        except Exception as e:
+            print(f"Ошибка загрузки видеофайла в авто-посте: {e}")
+            
+    if file_attachment:
+        await target_channel.send(embed=embed, file=file_attachment)
+    else:
+        await target_channel.send(embed=embed)
 
 @auto_post_loop.before_loop
 async def before_auto_post():
