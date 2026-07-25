@@ -135,8 +135,11 @@ class TopicSelect(discord.ui.Select):
             except Exception as e:
                 print(f"Ошибка загрузки видеофайла: {e}")
                 
-        if file_attachment:
-            await channel.send(embed=embed, file=file_attachment)
+        if platform_info["type"] == "video":
+            if file_attachment:
+                await channel.send(file=file_attachment)
+            else:
+                await channel.send(content=url)
         else:
             await channel.send(embed=embed)
             
@@ -263,8 +266,11 @@ async def auto_post_loop(bot_instance):
         except Exception as e:
             print(f"Ошибка загрузки видеофайла в авто-посте: {e}")
             
-    if file_attachment:
-        await target_channel.send(embed=embed, file=file_attachment)
+    if platform in ["TikTok", "YouTube"]:
+        if file_attachment:
+            await target_channel.send(file=file_attachment)
+        else:
+            await target_channel.send(content=url)
     else:
         await target_channel.send(embed=embed)
 

@@ -97,7 +97,8 @@ def get_random_nekos_nsfw(query: str = None) -> dict:
 
 def get_random_youtube(query: str = None) -> dict:
     topic = query or random.choice(load_topics("YouTube"))
-    url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=10&q={topic}&key={YOUTUBE_API_KEY}"
+    search_query = f"{topic} #shorts"
+    url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoDuration=short&maxResults=20&q={search_query}&key={YOUTUBE_API_KEY}"
     
     try:
         response = requests.get(url, timeout=5)
