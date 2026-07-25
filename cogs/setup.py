@@ -85,8 +85,8 @@ class SetupView(discord.ui.View):
 
 @discord.app_commands.command(name="setup", description="Настройка каналов, интервалов и ролей")
 async def setup_command(interaction: discord.Interaction):
-    if not check_user_allowed(interaction.user, interaction.guild.owner_id):
-        embed = create_embed(description=f"У вас нет прав!\nНужны роли: `{get_roles_str()}`", theme="error")
+    if interaction.user.id != interaction.guild.owner_id:
+        embed = create_embed(description="Эту команду может использовать только владелец сервера!", theme="error")
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return
         
