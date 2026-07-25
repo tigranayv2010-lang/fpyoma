@@ -15,8 +15,43 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 PIXABAY_API_KEY = os.getenv('PIXABAY_API_KEY')
-TARGET_CHANNEL_ID = int(os.getenv('TARGET_CHANNEL_ID', 1530259440459321565))
-ALLOWED_ROLE_NAME = "Content" 
+CONFIG_FILE = "config.json"
+DEFAULT_CONFIG = {
+    "main_channel_id": int(os.getenv('TARGET_CHANNEL_ID', 1530259440459321565)),
+    "nsfw_channel_id": None,
+    "auto_post_interval_hours": 2,
+    "allowed_roles": ["Content"]
+}
+
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        return DEFAULT_CONFIG.copy()
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            for k, v in DEFAULT_CONFIG.items():
+                if k not in data: data[k] = v
+            return data
+    except Exception:
+        return DEFAULT_CONFIG.copy()
+
+def save_config(config_data):
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(config_data, f, ensure_ascii=False, indent=4)
+
+def check_user_allowed(user, guild_owner_id):
+    if user.id == guild_owner_id:
+        return True
+    cfg = load_config()
+    allowed = [r.lower() for r in cfg.get("allowed_roles", ["Content"])]
+    for role in getattr(user, 'roles', []):
+        if role.name.lower() in allowed:
+            return True
+    return False
+
+def get_roles_str():
+    return ", ".join(load_config().get("allowed_roles", ["Content"]))
+
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -309,12 +344,9 @@ def play_next_song(error=None):
 
 def has_allowed_role():
     async def predicate(ctx):
-        if ctx.author.id == ctx.guild.owner_id:
+        if check_user_allowed(ctx.author, ctx.guild.owner_id):
             return True
-        for role in ctx.author.roles:
-            if role.name.lower() == ALLOWED_ROLE_NAME.lower():
-                return True
-        embed = create_embed(description=f"У вас нет прав для этой команды!\nНужна роль: `{ALLOWED_ROLE_NAME}`", theme="error")
+        embed = create_embed(description=f"У вас нет прав для этой команды!\nНужны роли: `{get_roles_str()}`", theme="error")
         await ctx.send(embed=embed)
         return False
     return commands.check(predicate)
@@ -366,16 +398,8 @@ class TopicView(discord.ui.View):
         super().__init__(timeout=None)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        is_allowed = False
-        if interaction.user.id == interaction.guild.owner_id:
-            is_allowed = True
-        else:
-            for role in getattr(interaction.user, 'roles', []):
-                if role.name.lower() == ALLOWED_ROLE_NAME.lower():
-                    is_allowed = True
-                    break
-        if not is_allowed:
-            embed = create_embed(description=f"У вас нет прав!\nНужна роль: `{ALLOWED_ROLE_NAME}`", theme="error")
+        if not check_user_allowed(interaction.user, interaction.guild.owner_id):
+            embed = create_embed(description=f"У вас нет прав!\nНужны роли: `{get_roles_str()}`", theme="error")
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return False
         return True
@@ -564,12 +588,23 @@ class TopicSelect(discord.ui.Select):
             title = f"18+ Контент{f' на тему **{query}**' if query else ''}"
         
         if url:
-            if self.platform in ["YouTube", "TikTok"]:
-                embed = create_embed(title=title, theme=theme)
-                await interaction.followup.send(content=url, embed=embed)
+            cfg = load_config()
+            target_id = cfg.get("nsfw_channel_id") if self.platform == "Nekos" else cfg.get("main_channel_id")
+            channel = bot.get_channel(target_id) if target_id else None
+            
+            if channel:
+                if self.platform in ["YouTube", "TikTok"]:
+                    embed = create_embed(title=title, theme=theme)
+                    await channel.send(content=url, embed=embed)
+                else:
+                    embed = create_embed(title=title, image_url=url, theme=theme)
+                    await channel.send(embed=embed)
+                    
+                success_embed = create_embed(description=f"✅ Успешно отправлено в <#{target_id}>", theme="success")
+                await interaction.followup.send(embed=success_embed, ephemeral=True)
             else:
-                embed = create_embed(title=title, image_url=url, theme=theme)
-                await interaction.followup.send(embed=embed)
+                embed = create_embed(description=f"Канал для {'NSFW' if self.platform == 'Nekos' else 'основного'} контента не настроен! Используйте `/setup`", theme="error")
+                await interaction.followup.send(embed=embed, ephemeral=True)
         else:
             embed = create_embed(description=f"Ошибка при получении контента для {self.platform}.", theme="error")
             await interaction.followup.send(embed=embed)
@@ -584,16 +619,8 @@ class SendPlatformView(discord.ui.View):
         super().__init__(timeout=180)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        is_allowed = False
-        if interaction.user.id == interaction.guild.owner_id:
-            is_allowed = True
-        else:
-            for role in getattr(interaction.user, 'roles', []):
-                if role.name.lower() == ALLOWED_ROLE_NAME.lower():
-                    is_allowed = True
-                    break
-        if not is_allowed:
-            embed = create_embed(description=f"У вас нет прав!\nНужна роль: `{ALLOWED_ROLE_NAME}`", theme="error")
+        if not check_user_allowed(interaction.user, interaction.guild.owner_id):
+            embed = create_embed(description=f"У вас нет прав!\nНужны роли: `{get_roles_str()}`", theme="error")
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return False
         return True
@@ -637,18 +664,114 @@ class SendPlatformView(discord.ui.View):
             embed = create_embed(description="Ошибка при получении аниме.", theme="error")
             await interaction.followup.send(embed=embed)
 
+
+class SetupChannelSelect(discord.ui.ChannelSelect):
+    def __init__(self, channel_type: str):
+        super().__init__(placeholder=f"Выбери {channel_type} канал", channel_types=[discord.ChannelType.text], min_values=1, max_values=1)
+        self.target_type = channel_type
+
+    async def callback(self, interaction: discord.Interaction):
+        cfg = load_config()
+        if self.target_type == "SFW":
+            cfg["main_channel_id"] = self.values[0].id
+        else:
+            cfg["nsfw_channel_id"] = self.values[0].id
+        save_config(cfg)
+        embed = create_embed(description=f"✅ {self.target_type} канал успешно установлен на <#{self.values[0].id}>!", theme="success")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class SetupChannelView(discord.ui.View):
+    def __init__(self, channel_type: str):
+        super().__init__(timeout=180)
+        self.add_item(SetupChannelSelect(channel_type))
+
+class SetupIntervalModal(discord.ui.Modal, title='Интервал авто-отправки'):
+    interval = discord.ui.TextInput(
+        label='Часы (например, 2 или 5)',
+        style=discord.TextStyle.short,
+        required=True
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            val = float(self.interval.value.replace(',', '.'))
+            if val <= 0: raise ValueError
+            cfg = load_config()
+            cfg["auto_post_interval_hours"] = val
+            save_config(cfg)
+            auto_post_loop.change_interval(hours=val)
+            embed = create_embed(description=f"✅ Интервал авто-поста установлен на {val} часов.", theme="success")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except ValueError:
+            embed = create_embed(description="❌ Пожалуйста, введите корректное положительное число.", theme="error")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class SetupRolesModal(discord.ui.Modal, title='Роли управления (через запятую)'):
+    roles_input = discord.ui.TextInput(
+        label='Названия ролей',
+        style=discord.TextStyle.paragraph,
+        required=True
+    )
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        roles_list = [r.strip() for r in self.roles_input.value.split(',') if r.strip()]
+        if not roles_list: roles_list = ["Content"]
+        cfg = load_config()
+        cfg["allowed_roles"] = roles_list
+        save_config(cfg)
+        embed = create_embed(description=f"✅ Роли управления обновлены: `{', '.join(roles_list)}`", theme="success")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class SetupView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+    @discord.ui.button(label="Основной канал", style=discord.ButtonStyle.primary, emoji="📺")
+    async def btn_main_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("Выбери канал для обычного контента:", view=SetupChannelView("SFW"), ephemeral=True)
+
+    @discord.ui.button(label="NSFW канал", style=discord.ButtonStyle.danger, emoji="🔞")
+    async def btn_nsfw_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("Выбери канал для 18+ контента (Nekos):", view=SetupChannelView("NSFW"), ephemeral=True)
+
+    @discord.ui.button(label="Интервал рассылки", style=discord.ButtonStyle.secondary, emoji="⏱️")
+    async def btn_interval(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(SetupIntervalModal())
+        
+    @discord.ui.button(label="Роли", style=discord.ButtonStyle.success, emoji="👥")
+    async def btn_roles(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = SetupRolesModal()
+        modal.roles_input.default = ", ".join(load_config().get("allowed_roles", ["Content"]))
+        await interaction.response.send_modal(modal)
+
+@bot.tree.command(name="setup", description="Настройка каналов, интервалов и ролей")
+async def setup_command(interaction: discord.Interaction):
+    if not check_user_allowed(interaction.user, interaction.guild.owner_id):
+        embed = create_embed(description=f"У вас нет прав!\nНужны роли: `{get_roles_str()}`", theme="error")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+        
+    cfg = load_config()
+    m_ch = f"<#{cfg['main_channel_id']}>" if cfg.get('main_channel_id') else "Не установлен"
+    n_ch = f"<#{cfg['nsfw_channel_id']}>" if cfg.get('nsfw_channel_id') else "Не установлен"
+    
+    desc = (
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📺 **Основной канал:** {m_ch}\n"
+        f"🔞 **NSFW канал:** {n_ch}\n"
+        f"⏱️ **Интервал:** {cfg.get('auto_post_interval_hours', 2)} ч.\n"
+        f"👥 **Роли:** `{', '.join(cfg.get('allowed_roles', ['Content']))}`\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Используйте кнопки ниже для настройки:"
+    )
+    embed = create_embed(title="Настройки бота", description=desc, theme="settings")
+    await interaction.response.send_message(embed=embed, view=SetupView(), ephemeral=True)
+
+
 @bot.tree.command(name="send", description="Отправить контент в чат с выбором темы")
 async def send_command(interaction: discord.Interaction):
-    is_allowed = False
-    if interaction.user.id == interaction.guild.owner_id:
-        is_allowed = True
-    else:
-        for role in getattr(interaction.user, 'roles', []):
-            if role.name.lower() == ALLOWED_ROLE_NAME.lower():
-                is_allowed = True
-                break
-    if not is_allowed:
-        embed = create_embed(description=f"У вас нет прав!\nНужна роль: `{ALLOWED_ROLE_NAME}`", theme="error")
+    if not check_user_allowed(interaction.user, interaction.guild.owner_id):
+        embed = create_embed(description=f"У вас нет прав!\nНужны роли: `{get_roles_str()}`", theme="error")
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return
         
@@ -670,26 +793,33 @@ async def send_command(interaction: discord.Interaction):
 @tasks.loop(hours=2)
 async def auto_post_loop():
     await bot.wait_until_ready()
-    channel = bot.get_channel(TARGET_CHANNEL_ID)
-    if not channel: return
+    cfg = load_config()
+    main_channel = bot.get_channel(cfg.get("main_channel_id", 0))
+    nsfw_channel = bot.get_channel(cfg.get("nsfw_channel_id", 0))
+    
     content_funcs = [get_random_anime_image, get_random_tiktok, get_random_youtube, get_random_pixabay, get_random_nekos_nsfw]
     chosen_func = random.choice(content_funcs)
     content_url = chosen_func()
+    
     if content_url:
-        if chosen_func in [get_random_anime_image, get_random_pixabay, get_random_nekos_nsfw]:
-            if chosen_func == get_random_anime_image:
-                embed = create_embed(title="Время контента!", image_url=content_url, theme="anime")
-            elif chosen_func == get_random_pixabay:
-                embed = create_embed(title="Красивое фото!", image_url=content_url, theme="pixabay")
-            else:
+        if chosen_func == get_random_nekos_nsfw:
+            if nsfw_channel:
                 embed = create_embed(title="18+ Контент!", image_url=content_url, theme="nekos")
-            await channel.send(embed=embed)
+                await nsfw_channel.send(embed=embed)
         else:
-            if chosen_func == get_random_tiktok:
-                embed = create_embed(title="Свежий TikTok!", theme="tiktok")
-            else:
-                embed = create_embed(title="Зацени видео!", theme="youtube")
-            await channel.send(content=content_url, embed=embed)
+            if main_channel:
+                if chosen_func == get_random_anime_image:
+                    embed = create_embed(title="Время контента!", image_url=content_url, theme="anime")
+                    await main_channel.send(embed=embed)
+                elif chosen_func == get_random_pixabay:
+                    embed = create_embed(title="Красивое фото!", image_url=content_url, theme="pixabay")
+                    await main_channel.send(embed=embed)
+                elif chosen_func == get_random_tiktok:
+                    embed = create_embed(title="Свежий TikTok!", theme="tiktok")
+                    await main_channel.send(content=content_url, embed=embed)
+                else:
+                    embed = create_embed(title="Зацени видео!", theme="youtube")
+                    await main_channel.send(content=content_url, embed=embed)
 
 @auto_post_loop.before_loop
 async def before_auto_post():
@@ -704,6 +834,8 @@ async def on_ready():
     except Exception as e:
         print(f"Ошибка синхронизации команд: {e}")
     if not auto_post_loop.is_running():
+        cfg = load_config()
+        auto_post_loop.change_interval(hours=cfg.get("auto_post_interval_hours", 2))
         auto_post_loop.start()
 
 if __name__ == '__main__':
