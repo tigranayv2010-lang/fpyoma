@@ -6,6 +6,7 @@ import asyncio
 import yt_dlp as youtube_dl
 import imageio_ffmpeg
 import os
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -44,6 +45,18 @@ ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
 music_queue = []
 current_requester = None
 voice_client = None
+
+def get_saved_topics():
+    try:
+        with open('topics.json', 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data.get('topics', [])
+    except FileNotFoundError:
+        return []
+
+def save_topics(topics_list):
+    with open('topics.json', 'w', encoding='utf-8') as f:
+        json.dump({'topics': topics_list}, f, ensure_ascii=False, indent=4)
 
 # Старые функции (оставляем для работы текстовых рассылок)
 def check_youtube_api():
@@ -93,7 +106,9 @@ def get_random_youtube(custom_query=None):
         query = custom_query
     else:
         # Темы для 24/7 радио
-        queries = ["lofi hip hop radio", "chill background music", "gaming mix", "synthwave mix"]
+        queries = get_saved_topics()
+        if not queries:
+            queries = ["lofi hip hop radio", "chill background music", "gaming mix", "synthwave mix"]
         query = random.choice(queries)
     
     url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=10&q={query}&key={YOUTUBE_API_KEY}"
@@ -167,6 +182,30 @@ def has_allowed_role():
         await ctx.send(f"У вас нет прав для этой команды! Нужна роль: `{ALLOWED_ROLE_NAME}`")
         return False
     return commands.check(predicate)
+
+@bot.tree.command(name="set_topics", description="Задать список тем для фонового радио (через запятую)")
+@discord.app_commands.describe(topics="Список тем через запятую (например: lofi, rock, jazz)")
+async def set_topics_command(interaction: discord.Interaction, topics: str):
+    is_allowed = False
+    if interaction.user.id == interaction.guild.owner_id:
+        is_allowed = True
+    else:
+        for role in getattr(interaction.user, 'roles', []):
+            if role.name.lower() == ALLOWED_ROLE_NAME.lower():
+                is_allowed = True
+                break
+                
+    if not is_allowed:
+        await interaction.response.send_message(f"У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`", ephemeral=True)
+        return
+        
+    topics_list = [t.strip() for t in topics.split(',') if t.strip()]
+    if not topics_list:
+        await interaction.response.send_message("❌ Вы не указали ни одной темы!", ephemeral=True)
+        return
+        
+    save_topics(topics_list)
+    await interaction.response.send_message(f"✅ Темы для радио обновлены!\nНовые темы: **{', '.join(topics_list)}**")
 
 @bot.command(name='join')
 @has_allowed_role()
@@ -312,6 +351,11 @@ async def before_auto_post():
 @bot.event
 async def on_ready():
     print(f'Бот {bot.user} успешно запущен!')
+    try:
+        synced = await bot.tree.sync()
+        print(f"Синхронизировано {len(synced)} слеш-команд")
+    except Exception as e:
+        print(f"Ошибка синхронизации команд: {e}")
     if not auto_post_loop.is_running():
         auto_post_loop.start()
 
