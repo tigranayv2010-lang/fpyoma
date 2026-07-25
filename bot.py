@@ -193,12 +193,15 @@ def get_random_nekos_nsfw(custom_query=None):
     except Exception:
         pass
         
-    # Фоллбэк на nekos.life если тип неизвестен или ошибка
+    # Фоллбэк на случайную категорию, если тип неизвестен (Nekobot поддерживает только определенные типы)
+    fallback_query = random.choice(["hentai", "ass", "boobs", "pussy", "thighs"])
+    url2 = f"https://nekobot.xyz/api/image?type={fallback_query}"
     try:
-        url2 = "https://nekos.life/api/v2/img/lewd"
         response2 = requests.get(url2, timeout=5)
         if response2.status_code == 200:
-            return response2.json().get('url')
+            data = response2.json()
+            if data.get('success'):
+                return data.get('message')
     except Exception as e:
         print(f"Ошибка при получении Nekos: {e}")
     return None
