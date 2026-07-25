@@ -30,6 +30,7 @@ def create_embed(description=None, title=None, image_url=None):
         embed.description = description
     if image_url:
         embed.set_image(url=image_url)
+    embed.set_footer(text="разработано ANBU Coding")
     return embed
 
 # === НАСТРОЙКИ МУЗЫКИ ===
