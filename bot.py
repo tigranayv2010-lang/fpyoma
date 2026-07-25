@@ -22,15 +22,35 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-def create_embed(description=None, title=None, image_url=None):
-    embed = discord.Embed(color=0xFFFFFF)
+from datetime import datetime
+
+# === ДИЗАЙН EMBED ===
+EMBED_THEMES = {
+    "youtube":  {"color": 0xFF0000, "emoji": "📺", "name": "YouTube"},
+    "tiktok":   {"color": 0x00F2EA, "emoji": "📱", "name": "TikTok"},
+    "pixabay":  {"color": 0x2EC866, "emoji": "🖼️", "name": "Pixabay"},
+    "nekos":    {"color": 0xFF69B4, "emoji": "🔞", "name": "Nekos 18+"},
+    "anime":    {"color": 0xE91E63, "emoji": "🎨", "name": "Anime Art"},
+    "music":    {"color": 0x9B59B6, "emoji": "🎵", "name": "Music Player"},
+    "settings": {"color": 0x3498DB, "emoji": "⚙️", "name": "Настройки"},
+    "success":  {"color": 0x2ECC71, "emoji": "✅", "name": "Успех"},
+    "error":    {"color": 0xE74C3C, "emoji": "❌", "name": "Ошибка"},
+    "info":     {"color": 0xFFFFFF, "emoji": "💎", "name": "ANBU Bot"},
+}
+ANBU_ICON = "https://cdn.discordapp.com/embed/avatars/0.png"
+
+def create_embed(description=None, title=None, image_url=None, theme="info"):
+    t = EMBED_THEMES.get(theme, EMBED_THEMES["info"])
+    embed = discord.Embed(color=t["color"], timestamp=datetime.utcnow())
+    
     if title:
-        embed.title = title
+        embed.title = f"{t['emoji']}  {title}"
     if description:
         embed.description = description
     if image_url:
         embed.set_image(url=image_url)
-    embed.set_footer(text="разработано ANBU Coding")
+    
+    embed.set_footer(text=f"разработано ANBU Coding  •  {t['name']}", icon_url=ANBU_ICON)
     return embed
 
 # === НАСТРОЙКИ МУЗЫКИ ===
@@ -294,7 +314,7 @@ def has_allowed_role():
         for role in ctx.author.roles:
             if role.name.lower() == ALLOWED_ROLE_NAME.lower():
                 return True
-        embed = create_embed(description=f"❌ У вас нет прав для этой команды! Нужна роль: `{ALLOWED_ROLE_NAME}`")
+        embed = create_embed(description=f"У вас нет прав для этой команды!\nНужна роль: `{ALLOWED_ROLE_NAME}`", theme="error")
         await ctx.send(embed=embed)
         return False
     return commands.check(predicate)
@@ -337,7 +357,8 @@ class TopicModal(discord.ui.Modal):
         else:
             save_nekos_topics(topics_list)
             
-        embed = create_embed(description=f"✅ Темы для **{self.platform}** обновлены!\nНовые темы: **{', '.join(topics_list)}**")
+        topics_formatted = ', '.join([f'`{t}`' for t in topics_list])
+        embed = create_embed(title="Темы обновлены", description=f"**Платформа:** {self.platform}\n\n{topics_formatted}", theme="success")
         await interaction.response.send_message(embed=embed, ephemeral=False)
 
 class TopicView(discord.ui.View):
@@ -354,7 +375,7 @@ class TopicView(discord.ui.View):
                     is_allowed = True
                     break
         if not is_allowed:
-            embed = create_embed(description=f"❌ У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`")
+            embed = create_embed(description=f"У вас нет прав!\nНужна роль: `{ALLOWED_ROLE_NAME}`", theme="error")
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return False
         return True
@@ -387,14 +408,17 @@ async def topics_command(interaction: discord.Interaction):
     px_text = ", ".join(px_topics) if px_topics else "По умолчанию"
     nk_text = ", ".join(nk_topics) if nk_topics else "По умолчанию (girl, pussy, large_breasts...)"
     
-    embed = create_embed(
-        title="Настройки тем контента",
-        description=f"📺 **YouTube:** {yt_text}\n📱 **TikTok:** {tk_text}\n🖼️ **Фото:** {px_text}\n🔞 **Nekos (18+):** {nk_text}\n\nНажмите на кнопку ниже, чтобы изменить темы:"
+    desc = (
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📺  **YouTube:**  {yt_text}\n"
+        f"📱  **TikTok:**  {tk_text}\n"
+        f"🖼️  **Pixabay:**  {px_text}\n"
+        f"🔞  **Nekos 18+:**  {nk_text}\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Нажмите на кнопку ниже, чтобы изменить темы:"
     )
-    await interaction.response.send_message(
-        embed=embed,
-        view=TopicView()
-    )
+    embed = create_embed(title="Настройки тем контента", description=desc, theme="settings")
+    await interaction.response.send_message(embed=embed, view=TopicView())
 
 @bot.command(name='join')
 @has_allowed_role()
@@ -402,7 +426,8 @@ async def join_command(ctx):
     """Подключает бота к голосовому каналу и запускает фоновую музыку."""
     global voice_client
     if not ctx.author.voice:
-        await ctx.send("Сначала зайди в голосовой канал!")
+        embed = create_embed(description="Сначала зайди в голосовой канал!", theme="error")
+        await ctx.send(embed=embed)
         return
         
     channel = ctx.author.voice.channel
@@ -412,33 +437,33 @@ async def join_command(ctx):
         voice_client = await channel.connect()
         # Запускаем бесконечный цикл музыки
         play_next_song()
-    embed = create_embed(description=f"✅ Подключился к `{channel.name}`. Фоновая музыка запущена!\nЗаказывай музыку через `!play <название>`")
+    embed = create_embed(title="Подключился!", description=f"Канал: **{channel.name}**\nФоновая музыка запущена!\n\nЗаказывай музыку через `!play <название>`", theme="music")
     await ctx.send(embed=embed)
 
 @bot.command(name='play')
 async def play_command(ctx, *, query: str):
     """Ищет песню на YouTube и предлагает выбор (1-5)."""
     if not voice_client or not voice_client.is_connected():
-        embed = create_embed(description="❌ Я еще не в канале! Пусть админ напишет `!join`")
+        embed = create_embed(description="Я еще не в канале!\nПусть админ напишет `!join`", theme="error")
         await ctx.send(embed=embed)
         return
         
-    embed = create_embed(description=f"🔎 Ищу **{query}**...")
+    embed = create_embed(description=f"Ищу **{query}**...", theme="music")
     await ctx.send(embed=embed)
     results = search_youtube_interactive(query)
     
     if not results:
-        embed = create_embed(description="❌ Ничего не найдено.")
+        embed = create_embed(description="Ничего не найдено.", theme="error")
         await ctx.send(embed=embed)
         return
         
     # Формируем список
-    msg = "**Выбери трек (напиши цифру от 1 до 5):**\n\n"
+    msg = "**Выбери трек (напиши цифру от 1 до 5):**\n━━━━━━━━━━━━━━━━━━━━━\n\n"
     for i, item in enumerate(results, 1):
         title = item.get('snippet', {}).get('title', 'Без названия')
-        msg += f"**{i}.** {title}\n"
+        msg += f"**`{i}`**  ▸  {title}\n"
         
-    embed = create_embed(description=msg)
+    embed = create_embed(title="Результаты поиска", description=msg, theme="music")
     await ctx.send(embed=embed)
     
     # Ждем ответ от того же пользователя
@@ -456,24 +481,24 @@ async def play_command(ctx, *, query: str):
             url = f"https://www.youtube.com/watch?v={video_id}"
             
             music_queue.append({'url': url, 'requester': ctx.author.id, 'title': video_title})
-            embed = create_embed(description=f"✅ Добавлено в очередь: **{video_title}**")
+            embed = create_embed(title="Добавлено в очередь", description=f"**{video_title}**", theme="success")
             await ctx.send(embed=embed)
             
             # Если сейчас играет фоновая музыка, скипаем
             if current_requester == bot.user.id and voice_client.is_playing():
                 voice_client.stop()
         else:
-            embed = create_embed(description="❌ Неверный номер. Попробуй заново через `!play`.")
+            embed = create_embed(description="Неверный номер. Попробуй заново через `!play`.", theme="error")
             await ctx.send(embed=embed)
     except asyncio.TimeoutError:
-        embed = create_embed(description="⏳ Время вышло! Ты не выбрал трек. Напиши `!play` снова.")
+        embed = create_embed(description="Время вышло! Ты не выбрал трек.\nНапиши `!play` снова.", theme="error")
         await ctx.send(embed=embed)
 
 @bot.command(name='skip')
 async def skip_command(ctx):
     """Пропускает текущую песню. Только для заказчика или админа."""
     if not voice_client or not voice_client.is_playing():
-        embed = create_embed(description="❌ Сейчас ничего не играет!")
+        embed = create_embed(description="Сейчас ничего не играет!", theme="error")
         await ctx.send(embed=embed)
         return
         
@@ -481,10 +506,10 @@ async def skip_command(ctx):
     # Если заказал человек, пропустить может только он или создатель сервера.
     if current_requester == bot.user.id or current_requester == ctx.author.id or ctx.author.id == ctx.guild.owner_id:
         voice_client.stop() # Это триггерит play_next_song() автоматически
-        embed = create_embed(description="⏭️ Трек пропущен!")
+        embed = create_embed(title="Трек пропущен", description="Включаю следующий...", theme="music")
         await ctx.send(embed=embed)
     else:
-        embed = create_embed(description="❌ Ты не можешь пропустить чужой заказ!")
+        embed = create_embed(description="Ты не можешь пропустить чужой заказ!", theme="error")
         await ctx.send(embed=embed)
 
 @bot.command(name='stop')
@@ -495,14 +520,16 @@ async def stop_command(ctx):
     music_queue.clear()
     if voice_client and voice_client.is_connected():
         await voice_client.disconnect()
-        await ctx.send("Отключился, очередь очищена!")
+        embed = create_embed(title="Отключился", description="Очередь очищена!", theme="music")
+        await ctx.send(embed=embed)
 
 # Старые текстовые команды
 @bot.command(name='test')
 async def test_api(ctx):
     yt_status = "" if check_youtube_api() else ""
     tt_status = "" if check_tiktok_api() else ""
-    await ctx.send(f"youtube - {yt_status}\ntiktok - {tt_status}")
+    embed = create_embed(title="Статус API", description=f"━━━━━━━━━━━━━━━━━━━━━\n📺  **YouTube:**  {yt_status}\n📱  **TikTok:**  {tt_status}\n━━━━━━━━━━━━━━━━━━━━━", theme="settings")
+    await ctx.send(embed=embed)
 
 class TopicSelect(discord.ui.Select):
     def __init__(self, platform: str, topics: list):
@@ -520,28 +547,31 @@ class TopicSelect(discord.ui.Select):
         url = None
         msg = ""
         
+        platform_themes = {"YouTube": "youtube", "TikTok": "tiktok", "Pixabay": "pixabay", "Nekos": "nekos"}
+        theme = platform_themes.get(self.platform, "info")
+        
         if self.platform == "YouTube":
             url = get_random_youtube(custom_query=query)
-            title = f"📺 Смотри, что нашел {f'на тему **{query}**' if query else ''}:"
+            title = f"Смотри, что нашел{f' на тему **{query}**' if query else ''}"
         elif self.platform == "TikTok":
             url = get_random_tiktok(custom_query=query)
-            title = f"📱 Лови TikTok {f'на тему **{query}**' if query else ''}:"
+            title = f"Лови TikTok{f' на тему **{query}**' if query else ''}"
         elif self.platform == "Pixabay":
             url = get_random_pixabay(custom_query=query)
-            title = f"🖼️ Красивое фото {f'на тему **{query}**' if query else ''}"
+            title = f"Красивое фото{f' на тему **{query}**' if query else ''}"
         elif self.platform == "Nekos":
             url = get_random_nekos_nsfw(custom_query=query)
-            title = f"🔞 18+ Контент {f'на тему **{query}**' if query else ''}"
+            title = f"18+ Контент{f' на тему **{query}**' if query else ''}"
         
         if url:
             if self.platform in ["YouTube", "TikTok"]:
-                embed = create_embed(title=title)
+                embed = create_embed(title=title, theme=theme)
                 await interaction.followup.send(content=url, embed=embed)
             else:
-                embed = create_embed(title=title, image_url=url)
+                embed = create_embed(title=title, image_url=url, theme=theme)
                 await interaction.followup.send(embed=embed)
         else:
-            embed = create_embed(description=f"❌ Ошибка при получении контента для {self.platform}.")
+            embed = create_embed(description=f"Ошибка при получении контента для {self.platform}.", theme="error")
             await interaction.followup.send(embed=embed)
 
 class TopicSelectView(discord.ui.View):
@@ -563,7 +593,8 @@ class SendPlatformView(discord.ui.View):
                     is_allowed = True
                     break
         if not is_allowed:
-            await interaction.response.send_message(f"У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`", ephemeral=True)
+            embed = create_embed(description=f"У вас нет прав!\nНужна роль: `{ALLOWED_ROLE_NAME}`", theme="error")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return False
         return True
 
@@ -571,35 +602,39 @@ class SendPlatformView(discord.ui.View):
     async def btn_yt(self, interaction: discord.Interaction, button: discord.ui.Button):
         topics = get_saved_topics()
         if not topics: topics = ["lofi hip hop", "gaming mix", "synthwave"]
-        await interaction.response.edit_message(content="**YouTube:** Выбери тему:", view=TopicSelectView("YouTube", topics))
+        embed = create_embed(description="🎥  **YouTube** — Выбери тему:", theme="youtube")
+        await interaction.response.edit_message(embed=embed, content=None, view=TopicSelectView("YouTube", topics))
 
     @discord.ui.button(label="TikTok", style=discord.ButtonStyle.success, custom_id="send_tk")
     async def btn_tk(self, interaction: discord.Interaction, button: discord.ui.Button):
         topics = get_saved_tiktok_topics()
         if not topics: topics = ["phonk", "cats", "funny"]
-        await interaction.response.edit_message(content="**TikTok:** Выбери тему:", view=TopicSelectView("TikTok", topics))
+        embed = create_embed(description="🎬  **TikTok** — Выбери тему:", theme="tiktok")
+        await interaction.response.edit_message(embed=embed, content=None, view=TopicSelectView("TikTok", topics))
 
     @discord.ui.button(label="Фото (Pixabay)", style=discord.ButtonStyle.secondary, custom_id="send_px")
     async def btn_px(self, interaction: discord.Interaction, button: discord.ui.Button):
         topics = get_saved_pixabay_topics()
         if not topics: topics = ["nature", "city", "cyberpunk"]
-        await interaction.response.edit_message(content="**Pixabay:** Выбери тему:", view=TopicSelectView("Pixabay", topics))
+        embed = create_embed(description="📷  **Pixabay** — Выбери тему:", theme="pixabay")
+        await interaction.response.edit_message(embed=embed, content=None, view=TopicSelectView("Pixabay", topics))
 
     @discord.ui.button(label="Nekos (18+)", style=discord.ButtonStyle.danger, custom_id="send_nk")
     async def btn_nk(self, interaction: discord.Interaction, button: discord.ui.Button):
         topics = get_saved_nekos_topics()
         if not topics: topics = ["girl", "pussy", "large_breasts", "kemonomimi", "exposed_girl_breasts"]
-        await interaction.response.edit_message(content="**Nekos (18+):** Выбери тему:", view=TopicSelectView("Nekos", topics))
+        embed = create_embed(description="🔥  **Nekos 18+** — Выбери тему:", theme="nekos")
+        await interaction.response.edit_message(embed=embed, content=None, view=TopicSelectView("Nekos", topics))
 
     @discord.ui.button(label="Аниме (Случайно)", style=discord.ButtonStyle.primary, custom_id="send_an")
     async def btn_an(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         url = get_random_anime_image()
         if url:
-            embed = create_embed(title="🎨 Аниме арт", image_url=url)
+            embed = create_embed(title="Аниме арт", image_url=url, theme="anime")
             await interaction.followup.send(embed=embed)
         else:
-            embed = create_embed(description="❌ Ошибка при получении аниме.")
+            embed = create_embed(description="Ошибка при получении аниме.", theme="error")
             await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="send", description="Отправить контент в чат с выбором темы")
@@ -613,11 +648,19 @@ async def send_command(interaction: discord.Interaction):
                 is_allowed = True
                 break
     if not is_allowed:
-        embed = create_embed(description=f"❌ У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`")
+        embed = create_embed(description=f"У вас нет прав!\nНужна роль: `{ALLOWED_ROLE_NAME}`", theme="error")
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return
         
-    embed = create_embed(description="**Выбери платформу для отправки контента:**")
+    desc = (
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "🎥  **YouTube**  │  🎬  **TikTok**\n"
+        "📷  **Pixabay**  │  🔥  **Nekos 18+**\n"
+        "🎨  **Anime**\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Выбери платформу ниже и отправь контент в чат:"
+    )
+    embed = create_embed(title="Отправить контент", description=desc)
     await interaction.response.send_message(
         embed=embed,
         view=SendPlatformView(),
@@ -635,19 +678,17 @@ async def auto_post_loop():
     if content_url:
         if chosen_func in [get_random_anime_image, get_random_pixabay, get_random_nekos_nsfw]:
             if chosen_func == get_random_anime_image:
-                title_text = "Время контента!"
+                embed = create_embed(title="Время контента!", image_url=content_url, theme="anime")
             elif chosen_func == get_random_pixabay:
-                title_text = "Красивое фото!"
+                embed = create_embed(title="Красивое фото!", image_url=content_url, theme="pixabay")
             else:
-                title_text = "🔞 18+ Контент!"
-            embed = create_embed(title=title_text, image_url=content_url)
+                embed = create_embed(title="18+ Контент!", image_url=content_url, theme="nekos")
             await channel.send(embed=embed)
         else:
             if chosen_func == get_random_tiktok:
-                msg = "Свежий TikTok!"
+                embed = create_embed(title="Свежий TikTok!", theme="tiktok")
             else:
-                msg = "Зацени видео с YouTube!"
-            embed = create_embed(title=msg)
+                embed = create_embed(title="Зацени видео!", theme="youtube")
             await channel.send(content=content_url, embed=embed)
 
 @auto_post_loop.before_loop
