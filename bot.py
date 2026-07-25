@@ -35,7 +35,7 @@ EMBED_THEMES = {
     "settings": {"color": 0x3498DB, "emoji": "⚙️", "name": "Настройки"},
     "success":  {"color": 0x2ECC71, "emoji": "✅", "name": "Успех"},
     "error":    {"color": 0xE74C3C, "emoji": "❌", "name": "Ошибка"},
-    "info":     {"color": 0xFFFFFF, "emoji": "💎", "name": "ANBU Bot"},
+    "info":     {"color": 0xFFFFFF, "emoji": "💎", "name": "Russia Games"},
 }
 ANBU_ICON = "https://cdn.discordapp.com/embed/avatars/0.png"
 
@@ -50,7 +50,7 @@ def create_embed(description=None, title=None, image_url=None, theme="info"):
     if image_url:
         embed.set_image(url=image_url)
     
-    embed.set_footer(text=f"разработано ANBU Coding  •  {t['name']}", icon_url=ANBU_ICON)
+    embed.set_footer(text=f"Разработано ANBU Coding  •  {t['name']}", icon_url=ANBU_ICON)
     return embed
 
 # === НАСТРОЙКИ МУЗЫКИ ===
