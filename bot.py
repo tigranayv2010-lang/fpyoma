@@ -176,12 +176,12 @@ def get_random_pixabay(custom_query=None):
 
 def get_random_nekos_nsfw(custom_query=None):
     if custom_query:
-        query = custom_query
+        query = custom_query.strip().lower()
     else:
         topics = get_saved_nekos_topics()
         if not topics:
             topics = ["hentai", "pussy", "ass", "boobs", "thighs", "kemonomimi"]
-        query = random.choice(topics)
+        query = random.choice(topics).strip().lower()
         
     url = f"https://nekobot.xyz/api/image?type={query}"
     try:
