@@ -27,10 +27,10 @@ def get_random_anime_image():
     try:
         response = requests.get("https://nekos.life/api/v2/img/neko", timeout=5)
         if response.status_code == 200:
-            return response.json().get("url")
+            return response.json().get("url"), "Аниме Арт"
     except Exception as e:
         print(f"Ошибка при получении картинки: {e}")
-    return None
+    return None, None
 
 def get_random_tiktok(custom_query=None):
     if custom_query:
@@ -54,12 +54,12 @@ def get_random_tiktok(custom_query=None):
                 author_id = video.get('author', {}).get('unique_id', '')
                 video_id = video.get('video_id', video.get('id', ''))
                 if author_id and video_id:
-                    return f"https://www.tiktok.com/@{author_id}/video/{video_id}"
+                    return f"https://www.tiktok.com/@{author_id}/video/{video_id}", custom_query or query
                 elif video.get('play'):
-                    return video.get('play')
+                    return video.get('play'), custom_query or query
     except Exception as e:
         print(f"Ошибка при получении TikTok: {e}")
-    return None
+    return None, None
 
 def get_random_pixabay(custom_query=None):
     if custom_query:
@@ -81,10 +81,10 @@ def get_random_pixabay(custom_query=None):
             hits = response.json().get('hits', [])
             if hits:
                 photo = random.choice(hits)
-                return photo.get('largeImageURL', photo.get('webformatURL'))
+                return photo.get('largeImageURL', photo.get('webformatURL')), query
     except Exception as e:
         print(f"Ошибка при получении фото с Pixabay: {e}")
-    return None
+    return None, None
 
 def get_random_nekos_nsfw(custom_query=None):
     if custom_query:
@@ -101,7 +101,7 @@ def get_random_nekos_nsfw(custom_query=None):
         if response.status_code == 200:
             data = response.json()
             if data and len(data) > 0:
-                return data[0].get('url')
+                return data[0].get('url'), tag
     except Exception:
         pass
         
@@ -112,10 +112,10 @@ def get_random_nekos_nsfw(custom_query=None):
         if response2.status_code == 200:
             data2 = response2.json()
             if data2 and len(data2) > 0:
-                return data2[0].get('url')
+                return data2[0].get('url'), tag
     except Exception as e:
         print(f"Ошибка при получении Nekos: {e}")
-    return None
+    return None, None
 
 def get_random_youtube(custom_query=None):
     if custom_query:
@@ -136,10 +136,10 @@ def get_random_youtube(custom_query=None):
                 video = random.choice(items)
                 video_id = video.get('id', {}).get('videoId')
                 if video_id:
-                    return f"https://www.youtube.com/watch?v={video_id}"
+                    return f"https://www.youtube.com/watch?v={video_id}", query
     except Exception as e:
         print(f"Ошибка при получении YouTube видео: {e}")
-    return None
+    return None, None
 
 def search_youtube_interactive(query):
     url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q={query}&key={YOUTUBE_API_KEY}"

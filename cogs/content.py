@@ -120,29 +120,31 @@ class TopicSelect(discord.ui.Select):
         theme = platform_themes.get(self.platform, "info")
         
         if self.platform == "YouTube":
-            url = get_random_youtube(custom_query=query)
-            title = f"Смотри, что нашел{f' на тему **{query}**' if query else ''}"
+            url, topic = get_random_youtube(custom_query=query)
+            title = "Смотри, что нашел"
         elif self.platform == "TikTok":
-            url = get_random_tiktok(custom_query=query)
-            title = f"Лови TikTok{f' на тему **{query}**' if query else ''}"
+            url, topic = get_random_tiktok(custom_query=query)
+            title = "Лови TikTok"
         elif self.platform == "Pixabay":
-            url = get_random_pixabay(custom_query=query)
-            title = f"Красивое фото{f' на тему **{query}**' if query else ''}"
+            url, topic = get_random_pixabay(custom_query=query)
+            title = "Красивое фото"
         elif self.platform == "Nekos":
-            url = get_random_nekos_nsfw(custom_query=query)
-            title = f"18+ Контент{f' на тему **{query}**' if query else ''}"
+            url, topic = get_random_nekos_nsfw(custom_query=query)
+            title = "18+ Контент"
         
         if url:
             cfg = load_config()
             target_id = cfg.get("nsfw_channel_id") if self.platform == "Nekos" else cfg.get("main_channel_id")
-            channel = bot.get_channel(target_id) if target_id else None
+            channel = interaction.client.get_channel(target_id) if target_id else None
             
             if channel:
                 if self.platform in ["YouTube", "TikTok"]:
-                    embed = create_embed(title=title, theme=theme)
-                    await channel.send(content=url, embed=embed)
+                    desc = f"**Тема:** {topic}\n\n[▶ Открыть видео]({url})\n\n{url}"
+                    embed = create_embed(title=title, description=desc, theme=theme)
+                    await channel.send(embed=embed)
                 else:
-                    embed = create_embed(title=title, image_url=url, theme=theme)
+                    desc = f"**Тема:** {topic}"
+                    embed = create_embed(title=title, description=desc, image_url=url, theme=theme)
                     await channel.send(embed=embed)
                     
                 success_embed = create_embed(description=f"✅ Успешно отправлено в <#{target_id}>", theme="success")
@@ -233,52 +235,43 @@ async def send_command(interaction: discord.Interaction):
     )
 
 @tasks.loop(hours=2)
-async def auto_post_loop():
-    await bot.wait_until_ready()
+async def auto_post_loop(bot_instance):
+    await bot_instance.wait_until_ready()
     cfg = load_config()
-    main_channel = bot.get_channel(cfg.get("main_channel_id", 0))
-    nsfw_channel = bot.get_channel(cfg.get("nsfw_channel_id", 0))
+    main_channel = bot_instance.get_channel(cfg.get("main_channel_id", 0))
+    nsfw_channel = bot_instance.get_channel(cfg.get("nsfw_channel_id", 0))
     
     content_funcs = [get_random_anime_image, get_random_tiktok, get_random_youtube, get_random_pixabay, get_random_nekos_nsfw]
     chosen_func = random.choice(content_funcs)
-    content_url = chosen_func()
+    content_url, topic = chosen_func()
     
     if content_url:
         if chosen_func == get_random_nekos_nsfw:
             if nsfw_channel:
-                embed = create_embed(title="18+ Контент!", image_url=content_url, theme="nekos")
+                embed = create_embed(title="18+ Контент!", description=f"**Тема:** {topic}", image_url=content_url, theme="nekos")
                 await nsfw_channel.send(embed=embed)
         else:
             if main_channel:
                 if chosen_func == get_random_anime_image:
-                    embed = create_embed(title="Время контента!", image_url=content_url, theme="anime")
+                    embed = create_embed(title="Время контента!", description=f"**Тема:** {topic}", image_url=content_url, theme="anime")
                     await main_channel.send(embed=embed)
                 elif chosen_func == get_random_pixabay:
-                    embed = create_embed(title="Красивое фото!", image_url=content_url, theme="pixabay")
+                    embed = create_embed(title="Красивое фото!", description=f"**Тема:** {topic}", image_url=content_url, theme="pixabay")
                     await main_channel.send(embed=embed)
                 elif chosen_func == get_random_tiktok:
-                    embed = create_embed(title="Свежий TikTok!", theme="tiktok")
-                    await main_channel.send(content=content_url, embed=embed)
+                    desc = f"**Тема:** {topic}\n\n[▶ Открыть TikTok]({content_url})\n\n{content_url}"
+                    embed = create_embed(title="Свежий TikTok!", description=desc, theme="tiktok")
+                    await main_channel.send(embed=embed)
                 else:
-                    embed = create_embed(title="Зацени видео!", theme="youtube")
-                    await main_channel.send(content=content_url, embed=embed)
+                    desc = f"**Тема:** {topic}\n\n[▶ Открыть YouTube]({content_url})\n\n{content_url}"
+                    embed = create_embed(title="Зацени видео!", description=desc, theme="youtube")
+                    await main_channel.send(embed=embed)
 
 @auto_post_loop.before_loop
 async def before_auto_post():
-    await bot.wait_until_ready()
+    pass
 
-@bot.event
-async def on_ready():
-    print(f'Бот {bot.user} успешно запущен!')
-    try:
-        synced = await bot.tree.sync()
-        print(f"Синхронизировано {len(synced)} слеш-команд")
-    except Exception as e:
-        print(f"Ошибка синхронизации команд: {e}")
-    if not auto_post_loop.is_running():
-        cfg = load_config()
-        auto_post_loop.change_interval(hours=cfg.get("auto_post_interval_hours", 2))
-        auto_post_loop.start()
+    pass
 
 
 async def setup(bot):
@@ -293,6 +286,6 @@ async def setup(bot):
             if not auto_post_loop.is_running():
                 cfg = load_config()
                 auto_post_loop.change_interval(hours=cfg.get("auto_post_interval_hours", 2))
-                auto_post_loop.start()
+                auto_post_loop.start(self.bot)
 
     await bot.add_cog(ContentCog(bot))
