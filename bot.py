@@ -120,13 +120,16 @@ def get_random_anime_image():
         print(f"Ошибка при получении картинки: {e}")
     return None
 
-def get_random_tiktok():
-    topics = get_saved_tiktok_topics()
-    if topics:
-        query = random.choice(topics)
-        url = f"https://www.tikwm.com/api/feed/search?keywords={query}&count=10"
+def get_random_tiktok(custom_query=None):
+    if custom_query:
+        url = f"https://www.tikwm.com/api/feed/search?keywords={custom_query}&count=10"
     else:
-        url = "https://www.tikwm.com/api/feed/list?region=RU&count=10"
+        topics = get_saved_tiktok_topics()
+        if topics:
+            query = random.choice(topics)
+            url = f"https://www.tikwm.com/api/feed/search?keywords={query}&count=10"
+        else:
+            url = "https://www.tikwm.com/api/feed/list?region=RU&count=10"
         
     try:
         response = requests.get(url, timeout=5)
@@ -470,53 +473,118 @@ async def test_api(ctx):
     tt_status = "" if check_tiktok_api() else ""
     await ctx.send(f"youtube - {yt_status}\ntiktok - {tt_status}")
 
-@bot.command(name='send_anime')
-@has_allowed_role()
-async def send_anime_command(ctx):
-    image_url = get_random_anime_image()
-    if image_url:
-        await ctx.send(f"{image_url}")
-    else:
-        await ctx.send("Не удалось получить картинку.")
+class TopicSelect(discord.ui.Select):
+    def __init__(self, platform: str, topics: list):
+        self.platform = platform
+        options = [discord.SelectOption(label="Случайная тема", value="random")]
+        for t in topics:
+            options.append(discord.SelectOption(label=t, value=t))
+        super().__init__(placeholder="Выбери тему...", min_values=1, max_values=1, options=options)
 
-@bot.command(name='send_tiktok')
-@has_allowed_role()
-async def send_tiktok_command(ctx):
-    video_url = get_random_tiktok()
-    if video_url:
-        await ctx.send(f"Лови TikTok:\n{video_url}")
-    else:
-        await ctx.send("Не удалось получить TikTok.")
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer() # Ждем загрузки контента
+        selected = self.values[0]
+        query = selected if selected != "random" else None
+        
+        url = None
+        msg = ""
+        
+        if self.platform == "YouTube":
+            url = get_random_youtube(custom_query=query)
+            msg = f"Смотри, что нашел {f'на тему **{query}**' if query else ''}:\n"
+        elif self.platform == "TikTok":
+            url = get_random_tiktok(custom_query=query)
+            msg = f"Лови TikTok {f'на тему **{query}**' if query else ''}:\n"
+        elif self.platform == "Pixabay":
+            url = get_random_pixabay(custom_query=query)
+            msg = f"Красивое фото {f'на тему **{query}**' if query else ''}:\n"
+        elif self.platform == "Nekos":
+            url = get_random_nekos_nsfw(custom_query=query)
+            msg = f"🔞 18+ Контент {f'на тему **{query}**' if query else ''}:\n|| "
+        
+        if url:
+            if self.platform == "Nekos":
+                await interaction.followup.send(f"{msg}{url} ||")
+            else:
+                await interaction.followup.send(f"{msg}{url}")
+        else:
+            await interaction.followup.send(f"Ошибка при получении контента для {self.platform}.")
 
-@bot.command(name='send_pixabay')
-@has_allowed_role()
-async def send_pixabay_command(ctx, *, theme: str = None):
-    image_url = get_random_pixabay(custom_query=theme)
-    if image_url:
-        topic_text = f"на тему **{theme}**" if theme else ""
-        await ctx.send(f"Красивое фото {topic_text}:\n{image_url}")
-    else:
-        await ctx.send("Ошибка при поиске Pixabay.")
+class TopicSelectView(discord.ui.View):
+    def __init__(self, platform: str, topics: list):
+        super().__init__(timeout=180)
+        self.add_item(TopicSelect(platform, topics))
 
-@bot.command(name='send_nekos_18')
-@has_allowed_role()
-async def send_nekos_nsfw_command(ctx, *, theme: str = None):
-    image_url = get_random_nekos_nsfw(custom_query=theme)
-    if image_url:
-        topic_text = f"на тему **{theme}**" if theme else ""
-        await ctx.send(f"🔞 18+ Контент {topic_text}:\n|| {image_url} ||")
-    else:
-        await ctx.send("Ошибка при получении Nekos (18+).")
+class SendPlatformView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
 
-@bot.command(name='send_youtube')
-@has_allowed_role()
-async def send_youtube_command(ctx, *, theme: str = None):
-    video_url = get_random_youtube(custom_query=theme)
-    if video_url:
-        topic_text = f"на тему **{theme}**" if theme else ""
-        await ctx.send(f"Смотри, что нашел {topic_text}:\n{video_url}")
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        is_allowed = False
+        if interaction.user.id == interaction.guild.owner_id:
+            is_allowed = True
+        else:
+            for role in getattr(interaction.user, 'roles', []):
+                if role.name.lower() == ALLOWED_ROLE_NAME.lower():
+                    is_allowed = True
+                    break
+        if not is_allowed:
+            await interaction.response.send_message(f"У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="YouTube", style=discord.ButtonStyle.primary, custom_id="send_yt")
+    async def btn_yt(self, interaction: discord.Interaction, button: discord.ui.Button):
+        topics = get_saved_topics()
+        if not topics: topics = ["lofi hip hop", "gaming mix", "synthwave"]
+        await interaction.response.edit_message(content="**YouTube:** Выбери тему:", view=TopicSelectView("YouTube", topics))
+
+    @discord.ui.button(label="TikTok", style=discord.ButtonStyle.success, custom_id="send_tk")
+    async def btn_tk(self, interaction: discord.Interaction, button: discord.ui.Button):
+        topics = get_saved_tiktok_topics()
+        if not topics: topics = ["phonk", "cats", "funny"]
+        await interaction.response.edit_message(content="**TikTok:** Выбери тему:", view=TopicSelectView("TikTok", topics))
+
+    @discord.ui.button(label="Фото (Pixabay)", style=discord.ButtonStyle.secondary, custom_id="send_px")
+    async def btn_px(self, interaction: discord.Interaction, button: discord.ui.Button):
+        topics = get_saved_pixabay_topics()
+        if not topics: topics = ["nature", "city", "cyberpunk"]
+        await interaction.response.edit_message(content="**Pixabay:** Выбери тему:", view=TopicSelectView("Pixabay", topics))
+
+    @discord.ui.button(label="Nekos (18+)", style=discord.ButtonStyle.danger, custom_id="send_nk")
+    async def btn_nk(self, interaction: discord.Interaction, button: discord.ui.Button):
+        topics = get_saved_nekos_topics()
+        if not topics: topics = ["hentai", "pussy", "ass"]
+        await interaction.response.edit_message(content="**Nekos (18+):** Выбери тему:", view=TopicSelectView("Nekos", topics))
+
+    @discord.ui.button(label="Аниме (Случайно)", style=discord.ButtonStyle.primary, custom_id="send_an")
+    async def btn_an(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        url = get_random_anime_image()
+        if url:
+            await interaction.followup.send(f"Аниме арт:\n{url}")
+        else:
+            await interaction.followup.send("Ошибка при получении аниме.")
+
+@bot.tree.command(name="send", description="Отправить контент в чат с выбором темы")
+async def send_command(interaction: discord.Interaction):
+    is_allowed = False
+    if interaction.user.id == interaction.guild.owner_id:
+        is_allowed = True
     else:
-        await ctx.send("Ошибка при поиске YouTube.")
+        for role in getattr(interaction.user, 'roles', []):
+            if role.name.lower() == ALLOWED_ROLE_NAME.lower():
+                is_allowed = True
+                break
+    if not is_allowed:
+        await interaction.response.send_message(f"У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`", ephemeral=True)
+        return
+        
+    await interaction.response.send_message(
+        "**Выбери платформу для отправки контента:**",
+        view=SendPlatformView(),
+        ephemeral=False
+    )
 
 @tasks.loop(hours=2)
 async def auto_post_loop():
