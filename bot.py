@@ -26,11 +26,11 @@ from datetime import datetime
 
 # === ДИЗАЙН EMBED ===
 EMBED_THEMES = {
-    "youtube":  {"color": 0xFF0000, "emoji": "📺", "name": "YouTube"},
-    "tiktok":   {"color": 0x00F2EA, "emoji": "📱", "name": "TikTok"},
-    "pixabay":  {"color": 0x2EC866, "emoji": "🖼️", "name": "Pixabay"},
-    "nekos":    {"color": 0xFF69B4, "emoji": "🔞", "name": "Nekos 18+"},
-    "anime":    {"color": 0xE91E63, "emoji": "🎨", "name": "Anime Art"},
+    "youtube":  {"color": 0xFF0000, "emoji": "<:youtube:1530525984942588027>", "name": "YouTube"},
+    "tiktok":   {"color": 0x00F2EA, "emoji": "<:tiktok:1530525976797380638>", "name": "TikTok"},
+    "pixabay":  {"color": 0x2EC866, "emoji": "<:pinterest:1530525972540166244>", "name": "Pixabay"},
+    "nekos":    {"color": 0xFF69B4, "emoji": "<:18:1530525967297020035>", "name": "Nekos 18+"},
+    "anime":    {"color": 0xE91E63, "emoji": "<:animejpg:1530526067939479654>", "name": "Anime Art"},
     "music":    {"color": 0x9B59B6, "emoji": "🎵", "name": "Music Player"},
     "settings": {"color": 0x3498DB, "emoji": "⚙️", "name": "Настройки"},
     "success":  {"color": 0x2ECC71, "emoji": "✅", "name": "Успех"},
@@ -410,10 +410,10 @@ async def topics_command(interaction: discord.Interaction):
     
     desc = (
         "━━━━━━━━━━━━━━━━━━━━━\n"
-        f"📺  **YouTube:**  {yt_text}\n"
-        f"📱  **TikTok:**  {tk_text}\n"
-        f"🖼️  **Pixabay:**  {px_text}\n"
-        f"🔞  **Nekos 18+:**  {nk_text}\n"
+        f"<:youtube:1530525984942588027>  **YouTube:**  {yt_text}\n"
+        f"<:tiktok:1530525976797380638>  **TikTok:**  {tk_text}\n"
+        f"<:pinterest:1530525972540166244>  **Pixabay:**  {px_text}\n"
+        f"<:18:1530525967297020035>  **Nekos 18+:**  {nk_text}\n"
         "━━━━━━━━━━━━━━━━━━━━━\n\n"
         "Нажмите на кнопку ниже, чтобы изменить темы:"
     )
@@ -528,7 +528,7 @@ async def stop_command(ctx):
 async def test_api(ctx):
     yt_status = "" if check_youtube_api() else ""
     tt_status = "" if check_tiktok_api() else ""
-    embed = create_embed(title="Статус API", description=f"━━━━━━━━━━━━━━━━━━━━━\n📺  **YouTube:**  {yt_status}\n📱  **TikTok:**  {tt_status}\n━━━━━━━━━━━━━━━━━━━━━", theme="settings")
+    embed = create_embed(title="Статус API", description=f"━━━━━━━━━━━━━━━━━━━━━\n<:youtube:1530525984942588027>  **YouTube:**  {yt_status}\n<:tiktok:1530525976797380638>  **TikTok:**  {tt_status}\n━━━━━━━━━━━━━━━━━━━━━", theme="settings")
     await ctx.send(embed=embed)
 
 class TopicSelect(discord.ui.Select):
@@ -602,28 +602,28 @@ class SendPlatformView(discord.ui.View):
     async def btn_yt(self, interaction: discord.Interaction, button: discord.ui.Button):
         topics = get_saved_topics()
         if not topics: topics = ["lofi hip hop", "gaming mix", "synthwave"]
-        embed = create_embed(description="🎥  **YouTube** — Выбери тему:", theme="youtube")
+        embed = create_embed(description="<:youtube:1530525984942588027>  **YouTube** — Выбери тему:", theme="youtube")
         await interaction.response.edit_message(embed=embed, content=None, view=TopicSelectView("YouTube", topics))
 
     @discord.ui.button(label="TikTok", style=discord.ButtonStyle.success, custom_id="send_tk")
     async def btn_tk(self, interaction: discord.Interaction, button: discord.ui.Button):
         topics = get_saved_tiktok_topics()
         if not topics: topics = ["phonk", "cats", "funny"]
-        embed = create_embed(description="🎬  **TikTok** — Выбери тему:", theme="tiktok")
+        embed = create_embed(description="<:tiktok:1530525976797380638>  **TikTok** — Выбери тему:", theme="tiktok")
         await interaction.response.edit_message(embed=embed, content=None, view=TopicSelectView("TikTok", topics))
 
     @discord.ui.button(label="Фото (Pixabay)", style=discord.ButtonStyle.secondary, custom_id="send_px")
     async def btn_px(self, interaction: discord.Interaction, button: discord.ui.Button):
         topics = get_saved_pixabay_topics()
         if not topics: topics = ["nature", "city", "cyberpunk"]
-        embed = create_embed(description="📷  **Pixabay** — Выбери тему:", theme="pixabay")
+        embed = create_embed(description="<:pinterest:1530525972540166244>  **Pixabay** — Выбери тему:", theme="pixabay")
         await interaction.response.edit_message(embed=embed, content=None, view=TopicSelectView("Pixabay", topics))
 
     @discord.ui.button(label="Nekos (18+)", style=discord.ButtonStyle.danger, custom_id="send_nk")
     async def btn_nk(self, interaction: discord.Interaction, button: discord.ui.Button):
         topics = get_saved_nekos_topics()
         if not topics: topics = ["girl", "pussy", "large_breasts", "kemonomimi", "exposed_girl_breasts"]
-        embed = create_embed(description="🔥  **Nekos 18+** — Выбери тему:", theme="nekos")
+        embed = create_embed(description="<:18:1530525967297020035>  **Nekos 18+** — Выбери тему:", theme="nekos")
         await interaction.response.edit_message(embed=embed, content=None, view=TopicSelectView("Nekos", topics))
 
     @discord.ui.button(label="Аниме (Случайно)", style=discord.ButtonStyle.primary, custom_id="send_an")
@@ -654,9 +654,9 @@ async def send_command(interaction: discord.Interaction):
         
     desc = (
         "━━━━━━━━━━━━━━━━━━━━━\n"
-        "🎥  **YouTube**  │  🎬  **TikTok**\n"
-        "📷  **Pixabay**  │  🔥  **Nekos 18+**\n"
-        "🎨  **Anime**\n"
+        "<:youtube:1530525984942588027>  **YouTube**  │  <:tiktok:1530525976797380638>  **TikTok**\n"
+        "<:pinterest:1530525972540166244>  **Pixabay**  │  <:18:1530525967297020035>  **Nekos 18+**\n"
+        "<:animejpg:1530526067939479654>  **Anime**\n"
         "━━━━━━━━━━━━━━━━━━━━━\n\n"
         "Выбери платформу ниже и отправь контент в чат:"
     )
