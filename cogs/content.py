@@ -82,6 +82,7 @@ class TopicSelect(discord.ui.Select):
         super().__init__(placeholder=f"Выбери тему для {platform}", options=options, custom_id=f"select_topic_{platform}")
 
     async def callback(self, interaction: discord.Interaction):
+        import asyncio
         await interaction.response.defer()
         
         query = self.values[0] if self.values[0] != "random" else None
@@ -90,7 +91,7 @@ class TopicSelect(discord.ui.Select):
         if not platform_info:
             return
             
-        data = platform_info["func"](query)
+        data = await asyncio.to_thread(platform_info["func"], query)
         if not data or not data.get("url"):
             await interaction.followup.send(embed=create_embed(description=f"Ошибка при получении контента для {self.platform}.", theme="error"), ephemeral=True)
             return
@@ -156,7 +157,8 @@ class SendPlatformView(discord.ui.View):
             await interaction.followup.send(embed=create_embed(description="Основной канал не настроен!", theme="error"), ephemeral=True)
             return
             
-        data = get_random_anime_image()
+        import asyncio
+        data = await asyncio.to_thread(get_random_anime_image)
         url, topic = data.get("url"), data.get("topic")
         if url:
             embed = create_embed(title="Аниме Арт", description=f"**Тема:** {topic}", image_url=url, theme="anime")
@@ -196,7 +198,8 @@ async def auto_post_loop(bot_instance):
     if not target_channel:
         return
         
-    data = func()
+    import asyncio
+    data = await asyncio.to_thread(func)
     url, topic, title, thumb = data.get("url"), data.get("topic"), data.get("title"), data.get("thumbnail")
     if not url:
         return

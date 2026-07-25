@@ -60,7 +60,7 @@ class MusicCog(commands.Cog):
             await interaction.user.voice.channel.connect()
         return True
 
-    def play_next_song(self):
+    async def play_next_song(self):
         vc = discord.utils.get(self.bot.voice_clients)
         if not vc or not vc.is_connected():
             self.is_playing = False
@@ -71,18 +71,19 @@ class MusicCog(commands.Cog):
             url, self.current_requester = song['url'], song['requester']
             print(f"Играем заказ из очереди: {url}")
         else:
-            data = get_random_youtube()
+            import asyncio
+            data = await asyncio.to_thread(get_random_youtube)
             url, topic = data.get("url"), data.get("topic")
             self.current_requester = self.bot.user.id
             print(f"Очередь пуста. Включаем фоновую музыку: {url} (Тема: {topic})")
             if not url:
-                self.bot.loop.call_later(5, self.play_next_song)
+                self.bot.loop.call_later(5, lambda: self.bot.loop.create_task(self.play_next_song()))
                 return
 
         def after_playing(e):
             if e:
                 print(f"Player error: {e}")
-            self.bot.loop.call_later(2, self.play_next_song)
+            self.bot.loop.call_later(2, lambda: self.bot.loop.create_task(self.play_next_song()))
 
         async def play():
             try:
@@ -90,9 +91,9 @@ class MusicCog(commands.Cog):
                 vc.play(player, after=after_playing)
             except Exception as e:
                 print(f"Ошибка воспроизведения: {e}")
-                self.bot.loop.call_later(2, self.play_next_song)
+                self.bot.loop.call_later(2, lambda: self.bot.loop.create_task(self.play_next_song()))
                 
-        asyncio.run_coroutine_threadsafe(play(), self.bot.loop)
+        self.bot.loop.create_task(play())
 
     @discord.app_commands.command(name="play", description="Воспроизвести музыку с YouTube")
     async def play(self, interaction: discord.Interaction, search: str):
@@ -113,7 +114,7 @@ class MusicCog(commands.Cog):
         vc = self.get_vc(interaction)
         if not vc.is_playing() and not self.is_playing:
             self.is_playing = True
-            self.play_next_song()
+            self.bot.loop.create_task(self.play_next_song())
             embed = create_embed(description=f"🎵 Начинаем воспроизведение: **{search}**", theme="youtube")
         else:
             embed = create_embed(description=f"➕ Добавлено в очередь: **{search}**", theme="info")
