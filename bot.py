@@ -251,6 +251,16 @@ async def set_tiktok_topics_command(interaction: discord.Interaction, topics: st
     save_tiktok_topics(topics_list)
     await interaction.response.send_message(f"Темы для TikTok обновлены!\nНовые темы: **{', '.join(topics_list)}**")
 
+@bot.tree.command(name="show_topics", description="Показать текущие темы для YouTube и TikTok")
+async def show_topics_command(interaction: discord.Interaction):
+    yt_topics = get_saved_topics()
+    tk_topics = get_saved_tiktok_topics()
+    
+    yt_text = ", ".join(yt_topics) if yt_topics else "По умолчанию (lofi, chill, gaming, synthwave)"
+    tk_text = ", ".join(tk_topics) if tk_topics else "По умолчанию (лента без поиска)"
+    
+    await interaction.response.send_message(f"**Текущие темы контента:**\n\n📺 **YouTube (Радио 24/7):** {yt_text}\n📱 **TikTok:** {tk_text}")
+
 @bot.command(name='join')
 @has_allowed_role()
 async def join_command(ctx):
