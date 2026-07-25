@@ -94,7 +94,8 @@ class TopicSelect(discord.ui.Select):
             
         data = await asyncio.to_thread(platform_info["func"], query)
         if not data or not data.get("url"):
-            await interaction.followup.send(embed=create_embed(description=f"Ошибка при получении контента для {self.platform}.", theme="error"), ephemeral=True)
+            error_embed = create_embed(description=f"Ошибка при получении контента для {self.platform}.", theme="error")
+            await interaction.edit_original_response(content=None, embed=error_embed, view=None)
             return
             
         url, topic, title, thumb = data.get("url"), data.get("topic"), data.get("title"), data.get("thumbnail")
@@ -103,7 +104,8 @@ class TopicSelect(discord.ui.Select):
         channel = interaction.client.get_channel(target_id) if target_id else None
         
         if not channel:
-            await interaction.followup.send(embed=create_embed(description=f"Канал для {'NSFW' if self.platform == 'Nekos' else 'основного'} контента не настроен! Используйте `/setup`", theme="error"), ephemeral=True)
+            error_embed = create_embed(description=f"Канал для {'NSFW' if self.platform == 'Nekos' else 'основного'} контента не настроен! Используйте `/setup`", theme="error")
+            await interaction.edit_original_response(content=None, embed=error_embed, view=None)
             return
 
         desc = f"**Тема:** {topic}\n\n[▶ Открыть контент]({url})\n\n{url}" if platform_info["type"] == "video" else f"**Тема:** {topic}"
@@ -116,7 +118,8 @@ class TopicSelect(discord.ui.Select):
             embed.set_thumbnail(url=thumb)
             
         await channel.send(embed=embed)
-        await interaction.followup.send(embed=create_embed(description=f"✅ Успешно отправлено в <#{target_id}>", theme="success"), ephemeral=True)
+        success_embed = create_embed(description=f"✅ Успешно отправлено в <#{target_id}>", theme="success")
+        await interaction.edit_original_response(content=None, embed=success_embed, view=None)
 
 class TopicSelectView(discord.ui.View):
     def __init__(self, platform: str):
