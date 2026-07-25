@@ -176,32 +176,31 @@ def get_random_pixabay(custom_query=None):
 
 def get_random_nekos_nsfw(custom_query=None):
     if custom_query:
-        query = custom_query.strip().lower()
+        tag = custom_query.strip().lower()
     else:
         topics = get_saved_nekos_topics()
         if not topics:
-            topics = ["hentai", "pussy", "ass", "boobs", "thighs", "kemonomimi"]
-        query = random.choice(topics).strip().lower()
+            topics = ["girl", "pussy", "large_breasts", "kemonomimi", "exposed_girl_breasts"]
+        tag = random.choice(topics).strip().lower()
         
-    url = f"https://nekobot.xyz/api/image?type={query}"
+    url = f"https://api.nekosapi.com/v4/images/random?rating=explicit&tag={tag}&limit=1"
     try:
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            if data.get('success'):
-                return data.get('message')
+            if data and len(data) > 0:
+                return data[0].get('url')
     except Exception:
         pass
         
-    # Фоллбэк на случайную категорию, если тип неизвестен (Nekobot поддерживает только определенные типы)
-    fallback_query = random.choice(["hentai", "ass", "boobs", "pussy", "thighs"])
-    url2 = f"https://nekobot.xyz/api/image?type={fallback_query}"
+    # Фоллбэк без тегов (просто случайная explicit картинка)
     try:
-        response2 = requests.get(url2, timeout=5)
+        url2 = "https://api.nekosapi.com/v4/images/random?rating=explicit&limit=1"
+        response2 = requests.get(url2, timeout=10)
         if response2.status_code == 200:
-            data = response2.json()
-            if data.get('success'):
-                return data.get('message')
+            data2 = response2.json()
+            if data2 and len(data2) > 0:
+                return data2[0].get('url')
     except Exception as e:
         print(f"Ошибка при получении Nekos: {e}")
     return None
@@ -372,7 +371,7 @@ async def topics_command(interaction: discord.Interaction):
     yt_text = ", ".join(yt_topics) if yt_topics else "По умолчанию"
     tk_text = ", ".join(tk_topics) if tk_topics else "По умолчанию"
     px_text = ", ".join(px_topics) if px_topics else "По умолчанию"
-    nk_text = ", ".join(nk_topics) if nk_topics else "По умолчанию (hentai, boobs, ass...)"
+    nk_text = ", ".join(nk_topics) if nk_topics else "По умолчанию (girl, pussy, large_breasts...)"
     
     await interaction.response.send_message(
         f"**Текущие темы контента:**\n\n📺 **YouTube:** {yt_text}\n📱 **TikTok:** {tk_text}\n🖼️ **Фото:** {px_text}\n🔞 **Nekos (18+):** {nk_text}\n\nНажмите на кнопку ниже, чтобы изменить темы:",
@@ -557,7 +556,7 @@ class SendPlatformView(discord.ui.View):
     @discord.ui.button(label="Nekos (18+)", style=discord.ButtonStyle.danger, custom_id="send_nk")
     async def btn_nk(self, interaction: discord.Interaction, button: discord.ui.Button):
         topics = get_saved_nekos_topics()
-        if not topics: topics = ["hentai", "pussy", "ass"]
+        if not topics: topics = ["girl", "pussy", "large_breasts", "kemonomimi", "exposed_girl_breasts"]
         await interaction.response.edit_message(content="**Nekos (18+):** Выбери тему:", view=TopicSelectView("Nekos", topics))
 
     @discord.ui.button(label="Аниме (Случайно)", style=discord.ButtonStyle.primary, custom_id="send_an")
