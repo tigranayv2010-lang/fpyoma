@@ -118,8 +118,10 @@ class TopicSelect(discord.ui.Select):
             embed.set_thumbnail(url=thumb)
             
         await channel.send(embed=embed)
-        success_embed = create_embed(description=f"✅ Успешно отправлено в <#{target_id}>", theme="success")
-        await interaction.edit_original_response(content=None, embed=success_embed, view=None)
+        try:
+            await interaction.delete_original_response()
+        except discord.errors.HTTPException:
+            pass
 
 class TopicSelectView(discord.ui.View):
     def __init__(self, platform: str):
