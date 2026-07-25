@@ -22,6 +22,16 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+def create_embed(description=None, title=None, image_url=None):
+    embed = discord.Embed(color=0xFFFFFF)
+    if title:
+        embed.title = title
+    if description:
+        embed.description = description
+    if image_url:
+        embed.set_image(url=image_url)
+    return embed
+
 # === НАСТРОЙКИ МУЗЫКИ ===
 ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
 ytdl_format_options = {
@@ -283,7 +293,8 @@ def has_allowed_role():
         for role in ctx.author.roles:
             if role.name.lower() == ALLOWED_ROLE_NAME.lower():
                 return True
-        await ctx.send(f"У вас нет прав для этой команды! Нужна роль: `{ALLOWED_ROLE_NAME}`")
+        embed = create_embed(description=f"❌ У вас нет прав для этой команды! Нужна роль: `{ALLOWED_ROLE_NAME}`")
+        await ctx.send(embed=embed)
         return False
     return commands.check(predicate)
 
@@ -325,7 +336,8 @@ class TopicModal(discord.ui.Modal):
         else:
             save_nekos_topics(topics_list)
             
-        await interaction.response.send_message(f"Темы для {self.platform} обновлены!\nНовые темы: **{', '.join(topics_list)}**", ephemeral=False)
+        embed = create_embed(description=f"✅ Темы для **{self.platform}** обновлены!\nНовые темы: **{', '.join(topics_list)}**")
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
 class TopicView(discord.ui.View):
     def __init__(self):
@@ -341,7 +353,8 @@ class TopicView(discord.ui.View):
                     is_allowed = True
                     break
         if not is_allowed:
-            await interaction.response.send_message(f"У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`", ephemeral=True)
+            embed = create_embed(description=f"❌ У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return False
         return True
 
@@ -373,8 +386,12 @@ async def topics_command(interaction: discord.Interaction):
     px_text = ", ".join(px_topics) if px_topics else "По умолчанию"
     nk_text = ", ".join(nk_topics) if nk_topics else "По умолчанию (girl, pussy, large_breasts...)"
     
+    embed = create_embed(
+        title="Настройки тем контента",
+        description=f"📺 **YouTube:** {yt_text}\n📱 **TikTok:** {tk_text}\n🖼️ **Фото:** {px_text}\n🔞 **Nekos (18+):** {nk_text}\n\nНажмите на кнопку ниже, чтобы изменить темы:"
+    )
     await interaction.response.send_message(
-        f"**Текущие темы контента:**\n\n📺 **YouTube:** {yt_text}\n📱 **TikTok:** {tk_text}\n🖼️ **Фото:** {px_text}\n🔞 **Nekos (18+):** {nk_text}\n\nНажмите на кнопку ниже, чтобы изменить темы:",
+        embed=embed,
         view=TopicView()
     )
 
@@ -394,29 +411,34 @@ async def join_command(ctx):
         voice_client = await channel.connect()
         # Запускаем бесконечный цикл музыки
         play_next_song()
-    await ctx.send(f"Подключился к `{channel.name}`. Фоновая музыка запущена! Заказывай музыку через `!play <название>`")
+    embed = create_embed(description=f"✅ Подключился к `{channel.name}`. Фоновая музыка запущена!\nЗаказывай музыку через `!play <название>`")
+    await ctx.send(embed=embed)
 
 @bot.command(name='play')
 async def play_command(ctx, *, query: str):
     """Ищет песню на YouTube и предлагает выбор (1-5)."""
     if not voice_client or not voice_client.is_connected():
-        await ctx.send("Я еще не в канале! Пусть админ напишет `!join`")
+        embed = create_embed(description="❌ Я еще не в канале! Пусть админ напишет `!join`")
+        await ctx.send(embed=embed)
         return
         
-    await ctx.send(f"Ищу **{query}**...")
+    embed = create_embed(description=f"🔎 Ищу **{query}**...")
+    await ctx.send(embed=embed)
     results = search_youtube_interactive(query)
     
     if not results:
-        await ctx.send("Ничего не найдено.")
+        embed = create_embed(description="❌ Ничего не найдено.")
+        await ctx.send(embed=embed)
         return
         
     # Формируем список
-    msg = "**Выбери трек (напиши цифру от 1 до 5):**\n"
+    msg = "**Выбери трек (напиши цифру от 1 до 5):**\n\n"
     for i, item in enumerate(results, 1):
         title = item.get('snippet', {}).get('title', 'Без названия')
-        msg += f"{i}. {title}\n"
+        msg += f"**{i}.** {title}\n"
         
-    await ctx.send(msg)
+    embed = create_embed(description=msg)
+    await ctx.send(embed=embed)
     
     # Ждем ответ от того же пользователя
     def check(m):
@@ -433,30 +455,36 @@ async def play_command(ctx, *, query: str):
             url = f"https://www.youtube.com/watch?v={video_id}"
             
             music_queue.append({'url': url, 'requester': ctx.author.id, 'title': video_title})
-            await ctx.send(f"Добавлено в очередь: **{video_title}**")
+            embed = create_embed(description=f"✅ Добавлено в очередь: **{video_title}**")
+            await ctx.send(embed=embed)
             
             # Если сейчас играет фоновая музыка, скипаем
             if current_requester == bot.user.id and voice_client.is_playing():
                 voice_client.stop()
         else:
-            await ctx.send("Неверный номер. Попробуй заново через `!play`.")
+            embed = create_embed(description="❌ Неверный номер. Попробуй заново через `!play`.")
+            await ctx.send(embed=embed)
     except asyncio.TimeoutError:
-        await ctx.send("Время вышло! Ты не выбрал трек. Напиши `!play` снова.")
+        embed = create_embed(description="⏳ Время вышло! Ты не выбрал трек. Напиши `!play` снова.")
+        await ctx.send(embed=embed)
 
 @bot.command(name='skip')
 async def skip_command(ctx):
     """Пропускает текущую песню. Только для заказчика или админа."""
     if not voice_client or not voice_client.is_playing():
-        await ctx.send("Сейчас ничего не играет!")
+        embed = create_embed(description="❌ Сейчас ничего не играет!")
+        await ctx.send(embed=embed)
         return
         
     # Если заказал сам бот (фоновая музыка), пропустить может любой. 
     # Если заказал человек, пропустить может только он или создатель сервера.
     if current_requester == bot.user.id or current_requester == ctx.author.id or ctx.author.id == ctx.guild.owner_id:
         voice_client.stop() # Это триггерит play_next_song() автоматически
-        await ctx.send("Трек пропущен!")
+        embed = create_embed(description="⏭️ Трек пропущен!")
+        await ctx.send(embed=embed)
     else:
-        await ctx.send("Ты не можешь пропустить чужой заказ!")
+        embed = create_embed(description="❌ Ты не можешь пропустить чужой заказ!")
+        await ctx.send(embed=embed)
 
 @bot.command(name='stop')
 @has_allowed_role()
@@ -493,24 +521,27 @@ class TopicSelect(discord.ui.Select):
         
         if self.platform == "YouTube":
             url = get_random_youtube(custom_query=query)
-            msg = f"Смотри, что нашел {f'на тему **{query}**' if query else ''}:\n"
+            title = f"📺 Смотри, что нашел {f'на тему **{query}**' if query else ''}:"
         elif self.platform == "TikTok":
             url = get_random_tiktok(custom_query=query)
-            msg = f"Лови TikTok {f'на тему **{query}**' if query else ''}:\n"
+            title = f"📱 Лови TikTok {f'на тему **{query}**' if query else ''}:"
         elif self.platform == "Pixabay":
             url = get_random_pixabay(custom_query=query)
-            msg = f"Красивое фото {f'на тему **{query}**' if query else ''}:\n"
+            title = f"🖼️ Красивое фото {f'на тему **{query}**' if query else ''}"
         elif self.platform == "Nekos":
             url = get_random_nekos_nsfw(custom_query=query)
-            msg = f"🔞 18+ Контент {f'на тему **{query}**' if query else ''}:\n|| "
+            title = f"🔞 18+ Контент {f'на тему **{query}**' if query else ''}"
         
         if url:
-            if self.platform == "Nekos":
-                await interaction.followup.send(f"{msg}{url} ||")
+            if self.platform in ["YouTube", "TikTok"]:
+                embed = create_embed(title=title)
+                await interaction.followup.send(content=url, embed=embed)
             else:
-                await interaction.followup.send(f"{msg}{url}")
+                embed = create_embed(title=title, image_url=url)
+                await interaction.followup.send(embed=embed)
         else:
-            await interaction.followup.send(f"Ошибка при получении контента для {self.platform}.")
+            embed = create_embed(description=f"❌ Ошибка при получении контента для {self.platform}.")
+            await interaction.followup.send(embed=embed)
 
 class TopicSelectView(discord.ui.View):
     def __init__(self, platform: str, topics: list):
@@ -564,9 +595,11 @@ class SendPlatformView(discord.ui.View):
         await interaction.response.defer()
         url = get_random_anime_image()
         if url:
-            await interaction.followup.send(f"Аниме арт:\n{url}")
+            embed = create_embed(title="🎨 Аниме арт", image_url=url)
+            await interaction.followup.send(embed=embed)
         else:
-            await interaction.followup.send("Ошибка при получении аниме.")
+            embed = create_embed(description="❌ Ошибка при получении аниме.")
+            await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="send", description="Отправить контент в чат с выбором темы")
 async def send_command(interaction: discord.Interaction):
@@ -579,11 +612,13 @@ async def send_command(interaction: discord.Interaction):
                 is_allowed = True
                 break
     if not is_allowed:
-        await interaction.response.send_message(f"У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`", ephemeral=True)
+        embed = create_embed(description=f"❌ У вас нет прав! Нужна роль: `{ALLOWED_ROLE_NAME}`")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
         
+    embed = create_embed(description="**Выбери платформу для отправки контента:**")
     await interaction.response.send_message(
-        "**Выбери платформу для отправки контента:**",
+        embed=embed,
         view=SendPlatformView(),
         ephemeral=False
     )
@@ -597,18 +632,22 @@ async def auto_post_loop():
     chosen_func = random.choice(content_funcs)
     content_url = chosen_func()
     if content_url:
-        if chosen_func == get_random_anime_image:
-            msg = "Время контента!\n"
-        elif chosen_func == get_random_tiktok:
-            msg = "Свежий TikTok!\n"
-        elif chosen_func == get_random_pixabay:
-            msg = "Красивое фото!\n"
-        elif chosen_func == get_random_nekos_nsfw:
-            msg = "🔞 18+ Контент!\n|| "
-            content_url += " ||"
+        if chosen_func in [get_random_anime_image, get_random_pixabay, get_random_nekos_nsfw]:
+            if chosen_func == get_random_anime_image:
+                title_text = "Время контента!"
+            elif chosen_func == get_random_pixabay:
+                title_text = "Красивое фото!"
+            else:
+                title_text = "🔞 18+ Контент!"
+            embed = create_embed(title=title_text, image_url=content_url)
+            await channel.send(embed=embed)
         else:
-            msg = "Зацени видео с YouTube!\n"
-        await channel.send(f"{msg}{content_url}")
+            if chosen_func == get_random_tiktok:
+                msg = "Свежий TikTok!"
+            else:
+                msg = "Зацени видео с YouTube!"
+            embed = create_embed(title=msg)
+            await channel.send(content=content_url, embed=embed)
 
 @auto_post_loop.before_loop
 async def before_auto_post():
