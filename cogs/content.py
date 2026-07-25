@@ -73,11 +73,12 @@ class TopicSelect(discord.ui.Select):
         
         # Load topics dynamically
         topics = load_topics(platform)
-        if not topics:
-            topics = ["random"]
 
         options = [discord.SelectOption(label="Случайная тема", value="random", emoji="🎲")]
-        options.extend([discord.SelectOption(label=t, value=t) for t in topics[:24]])
+        if topics:
+            # We filter out "random" just in case it's in the topics list to avoid duplicate values
+            filtered_topics = [t for t in topics if t.lower() != "random"]
+            options.extend([discord.SelectOption(label=t, value=t) for t in filtered_topics[:24]])
             
         super().__init__(placeholder=f"Выбери тему для {platform}", options=options, custom_id=f"select_topic_{platform}")
 
