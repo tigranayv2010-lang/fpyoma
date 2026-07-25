@@ -201,11 +201,11 @@ async def set_topics_command(interaction: discord.Interaction, topics: str):
         
     topics_list = [t.strip() for t in topics.split(',') if t.strip()]
     if not topics_list:
-        await interaction.response.send_message("❌ Вы не указали ни одной темы!", ephemeral=True)
+        await interaction.response.send_message("Вы не указали ни одной темы!", ephemeral=True)
         return
         
     save_topics(topics_list)
-    await interaction.response.send_message(f"✅ Темы для радио обновлены!\nНовые темы: **{', '.join(topics_list)}**")
+    await interaction.response.send_message(f"Темы для радио обновлены!\nНовые темы: **{', '.join(topics_list)}**")
 
 @bot.command(name='join')
 @has_allowed_role()
@@ -213,7 +213,7 @@ async def join_command(ctx):
     """Подключает бота к голосовому каналу и запускает 24/7 радио."""
     global voice_client
     if not ctx.author.voice:
-        await ctx.send("❌ Сначала зайди в голосовой канал!")
+        await ctx.send("Сначала зайди в голосовой канал!")
         return
         
     channel = ctx.author.voice.channel
@@ -223,20 +223,20 @@ async def join_command(ctx):
         voice_client = await channel.connect()
         # Запускаем бесконечный цикл музыки
         play_next_song()
-    await ctx.send(f"✅ Подключился к `{channel.name}`. Радио 24/7 запущено! Заказывай музыку через `!play <название>`")
+    await ctx.send(f"Подключился к `{channel.name}`. Радио 24/7 запущено! Заказывай музыку через `!play <название>`")
 
 @bot.command(name='play')
 async def play_command(ctx, *, query: str):
     """Ищет песню на YouTube и предлагает выбор (1-5)."""
     if not voice_client or not voice_client.is_connected():
-        await ctx.send("❌ Я еще не в канале! Пусть админ напишет `!join`")
+        await ctx.send("Я еще не в канале! Пусть админ напишет `!join`")
         return
         
-    await ctx.send(f"🔍 Ищу **{query}**...")
+    await ctx.send(f"Ищу **{query}**...")
     results = search_youtube_interactive(query)
     
     if not results:
-        await ctx.send("❌ Ничего не найдено.")
+        await ctx.send("Ничего не найдено.")
         return
         
     # Формируем список
@@ -262,30 +262,30 @@ async def play_command(ctx, *, query: str):
             url = f"https://www.youtube.com/watch?v={video_id}"
             
             music_queue.append({'url': url, 'requester': ctx.author.id, 'title': video_title})
-            await ctx.send(f"🎶 Добавлено в очередь: **{video_title}**")
+            await ctx.send(f"Добавлено в очередь: **{video_title}**")
             
             # Если сейчас играет радио, скипаем
             if current_requester == bot.user.id and voice_client.is_playing():
                 voice_client.stop()
         else:
-            await ctx.send("❌ Неверный номер. Попробуй заново через `!play`.")
+            await ctx.send("Неверный номер. Попробуй заново через `!play`.")
     except asyncio.TimeoutError:
-        await ctx.send("⏳ Время вышло! Ты не выбрал трек. Напиши `!play` снова.")
+        await ctx.send("Время вышло! Ты не выбрал трек. Напиши `!play` снова.")
 
 @bot.command(name='skip')
 async def skip_command(ctx):
     """Пропускает текущую песню. Только для заказчика или админа."""
     if not voice_client or not voice_client.is_playing():
-        await ctx.send("❌ Сейчас ничего не играет!")
+        await ctx.send("Сейчас ничего не играет!")
         return
         
     # Если заказал сам бот (радио), пропустить может любой. 
     # Если заказал человек, пропустить может только он или создатель сервера.
     if current_requester == bot.user.id or current_requester == ctx.author.id or ctx.author.id == ctx.guild.owner_id:
         voice_client.stop() # Это триггерит play_next_song() автоматически
-        await ctx.send("⏭️ Трек пропущен!")
+        await ctx.send("Трек пропущен!")
     else:
-        await ctx.send("❌ Ты не можешь пропустить чужой заказ!")
+        await ctx.send("Ты не можешь пропустить чужой заказ!")
 
 @bot.command(name='stop')
 @has_allowed_role()
@@ -295,13 +295,13 @@ async def stop_command(ctx):
     music_queue.clear()
     if voice_client and voice_client.is_connected():
         await voice_client.disconnect()
-        await ctx.send("🛑 Отключился, очередь очищена!")
+        await ctx.send("Отключился, очередь очищена!")
 
 # Старые текстовые команды
 @bot.command(name='test')
 async def test_api(ctx):
-    yt_status = "✅" if check_youtube_api() else "❌"
-    tt_status = "✅" if check_tiktok_api() else "❌"
+    yt_status = "" if check_youtube_api() else ""
+    tt_status = "" if check_tiktok_api() else ""
     await ctx.send(f"youtube - {yt_status}\ntiktok - {tt_status}")
 
 @bot.command(name='send_anime')
@@ -311,7 +311,7 @@ async def send_anime_command(ctx):
     if image_url:
         await ctx.send(f"{image_url}")
     else:
-        await ctx.send("❌ Не удалось получить картинку.")
+        await ctx.send("Не удалось получить картинку.")
 
 @bot.command(name='send_tiktok')
 @has_allowed_role()
@@ -320,7 +320,7 @@ async def send_tiktok_command(ctx):
     if video_url:
         await ctx.send(f"Лови TikTok:\n{video_url}")
     else:
-        await ctx.send("❌ Не удалось получить TikTok.")
+        await ctx.send("Не удалось получить TikTok.")
 
 @bot.command(name='send_youtube')
 @has_allowed_role()
@@ -330,7 +330,7 @@ async def send_youtube_command(ctx, *, theme: str = None):
         topic_text = f"на тему **{theme}**" if theme else ""
         await ctx.send(f"Смотри, что нашел {topic_text}:\n{video_url}")
     else:
-        await ctx.send("❌ Ошибка при поиске YouTube.")
+        await ctx.send("Ошибка при поиске YouTube.")
 
 @tasks.loop(hours=2)
 async def auto_post_loop():
