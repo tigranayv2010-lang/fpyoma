@@ -83,6 +83,18 @@ def save_nekos_topics(topics_list):
     with open('nekos_topics.json', 'w', encoding='utf-8') as f:
         json.dump({'topics': topics_list}, f, ensure_ascii=False, indent=4)
 
+def get_saved_pixabay_topics():
+    try:
+        with open('pixabay_topics.json', 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data.get('topics', [])
+    except FileNotFoundError:
+        return []
+
+def save_pixabay_topics(topics_list):
+    with open('pixabay_topics.json', 'w', encoding='utf-8') as f:
+        json.dump({'topics': topics_list}, f, ensure_ascii=False, indent=4)
+
 # Старые функции (оставляем для работы текстовых рассылок)
 def check_youtube_api():
     url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&q=test&key={YOUTUBE_API_KEY}"
@@ -132,6 +144,31 @@ def get_random_tiktok():
                     return video.get('play')
     except Exception as e:
         print(f"Ошибка при получении TikTok: {e}")
+    return None
+
+def get_random_pixabay(custom_query=None):
+    if custom_query:
+        query = custom_query
+    else:
+        topics = get_saved_pixabay_topics()
+        if not topics:
+            topics = ["nature", "city", "cyberpunk", "animals", "cars"]
+        query = random.choice(topics)
+        
+    if not PIXABAY_API_KEY:
+        print("PIXABAY_API_KEY не установлен!")
+        return None
+        
+    url = f"https://pixabay.com/api/?key={PIXABAY_API_KEY}&q={query}&image_type=photo&per_page=20"
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            hits = response.json().get('hits', [])
+            if hits:
+                photo = random.choice(hits)
+                return photo.get('largeImageURL', photo.get('webformatURL'))
+    except Exception as e:
+        print(f"Ошибка при получении фото с Pixabay: {e}")
     return None
 
 def get_random_nekos_nsfw(custom_query=None):
@@ -254,6 +291,8 @@ class TopicModal(discord.ui.Modal):
             current_topics = get_saved_topics()
         elif platform == "TikTok":
             current_topics = get_saved_tiktok_topics()
+        elif platform == "Pixabay":
+            current_topics = get_saved_pixabay_topics()
         else:
             current_topics = get_saved_nekos_topics()
             
@@ -276,6 +315,8 @@ class TopicModal(discord.ui.Modal):
             save_topics(topics_list)
         elif self.platform == "TikTok":
             save_tiktok_topics(topics_list)
+        elif self.platform == "Pixabay":
+            save_pixabay_topics(topics_list)
         else:
             save_nekos_topics(topics_list)
             
@@ -307,6 +348,10 @@ class TopicView(discord.ui.View):
     async def btn_tk(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(TopicModal("TikTok"))
 
+    @discord.ui.button(label="Фото (Pixabay)", style=discord.ButtonStyle.secondary, custom_id="btn_px")
+    async def btn_px(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(TopicModal("Pixabay"))
+
     @discord.ui.button(label="Nekos (18+)", style=discord.ButtonStyle.danger, custom_id="btn_nk")
     async def btn_nk(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(TopicModal("Nekos"))
@@ -315,14 +360,16 @@ class TopicView(discord.ui.View):
 async def topics_command(interaction: discord.Interaction):
     yt_topics = get_saved_topics()
     tk_topics = get_saved_tiktok_topics()
+    px_topics = get_saved_pixabay_topics()
     nk_topics = get_saved_nekos_topics()
     
     yt_text = ", ".join(yt_topics) if yt_topics else "По умолчанию"
     tk_text = ", ".join(tk_topics) if tk_topics else "По умолчанию"
+    px_text = ", ".join(px_topics) if px_topics else "По умолчанию"
     nk_text = ", ".join(nk_topics) if nk_topics else "По умолчанию (hentai, boobs, ass...)"
     
     await interaction.response.send_message(
-        f"**Текущие темы контента:**\n\n📺 **YouTube:** {yt_text}\n📱 **TikTok:** {tk_text}\n🔞 **Nekos (18+):** {nk_text}\n\nНажмите на кнопку ниже, чтобы изменить темы:",
+        f"**Текущие темы контента:**\n\n📺 **YouTube:** {yt_text}\n📱 **TikTok:** {tk_text}\n🖼️ **Фото:** {px_text}\n🔞 **Nekos (18+):** {nk_text}\n\nНажмите на кнопку ниже, чтобы изменить темы:",
         view=TopicView()
     )
 
@@ -441,6 +488,16 @@ async def send_tiktok_command(ctx):
     else:
         await ctx.send("Не удалось получить TikTok.")
 
+@bot.command(name='send_pixabay')
+@has_allowed_role()
+async def send_pixabay_command(ctx, *, theme: str = None):
+    image_url = get_random_pixabay(custom_query=theme)
+    if image_url:
+        topic_text = f"на тему **{theme}**" if theme else ""
+        await ctx.send(f"Красивое фото {topic_text}:\n{image_url}")
+    else:
+        await ctx.send("Ошибка при поиске Pixabay.")
+
 @bot.command(name='send_nekos_18')
 @has_allowed_role()
 async def send_nekos_nsfw_command(ctx, *, theme: str = None):
@@ -466,7 +523,7 @@ async def auto_post_loop():
     await bot.wait_until_ready()
     channel = bot.get_channel(TARGET_CHANNEL_ID)
     if not channel: return
-    content_funcs = [get_random_anime_image, get_random_tiktok, get_random_youtube, get_random_nekos_nsfw]
+    content_funcs = [get_random_anime_image, get_random_tiktok, get_random_youtube, get_random_pixabay, get_random_nekos_nsfw]
     chosen_func = random.choice(content_funcs)
     content_url = chosen_func()
     if content_url:
@@ -474,6 +531,8 @@ async def auto_post_loop():
             msg = "Время контента!\n"
         elif chosen_func == get_random_tiktok:
             msg = "Свежий TikTok!\n"
+        elif chosen_func == get_random_pixabay:
+            msg = "Красивое фото!\n"
         elif chosen_func == get_random_nekos_nsfw:
             msg = "🔞 18+ Контент!\n|| "
             content_url += " ||"
