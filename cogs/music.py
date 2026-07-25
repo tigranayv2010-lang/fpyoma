@@ -1,13 +1,11 @@
 import discord
 from discord.ext import commands
-import yt_dlp as youtube_dl
-import imageio_ffmpeg
-from utils.ui import create_embed
-from utils.api import get_random_youtube, search_youtube_interactive
 import asyncio
-from utils.config import check_user_allowed, get_roles_str
+import yt_dlp
+from utils.ui import create_embed
+from utils.api import get_random_youtube
 
-ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+# YTDL Settings
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
@@ -21,30 +19,56 @@ ytdl_format_options = {
     'default_search': 'auto',
     'source_address': '0.0.0.0'
 }
-ffmpeg_options = {
-    'options': '-vn',
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
-}
-ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
+ffmpeg_options = {'options': '-vn'}
+ytdl = yt_dlp.YoutubeDL(ytdl_format_options)
+
+class YTDLSource(discord.PCMVolumeTransformer):
+    def __init__(self, source, *, data, volume=0.5):
+        super().__init__(source, volume)
+        self.data = data
+        self.title = data.get('title')
+        self.url = data.get('url')
+
+    @classmethod
+    async def from_url(cls, url, *, loop=None, stream=False):
+        loop = loop or asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
+        
+        if 'entries' in data:
+            data = data['entries'][0]
+            
+        filename = data['url'] if stream else ytdl.prepare_filename(data)
+        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
 
 class MusicCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.music_queue = []
+        self.queue = []
+        self.is_playing = False
         self.current_requester = None
-        self.voice_client = None
 
-    def play_next_song(self, error=None):
-        if error:
-            print(f"Ошибка проигрывания: {error}")
-        
-        if not self.voice_client or not self.voice_client.is_connected():
+    def get_vc(self, interaction: discord.Interaction) -> discord.VoiceClient | None:
+        return interaction.guild.voice_client
+
+    async def ensure_voice(self, interaction: discord.Interaction) -> bool:
+        if not interaction.user.voice:
+            await interaction.response.send_message(embed=create_embed(description="Вы не в голосовом канале!", theme="error"), ephemeral=True)
+            return False
+            
+        vc = self.get_vc(interaction)
+        if not vc:
+            await interaction.user.voice.channel.connect()
+        return True
+
+    def play_next_song(self):
+        vc = discord.utils.get(self.bot.voice_clients)
+        if not vc or not vc.is_connected():
+            self.is_playing = False
             return
             
-        if len(self.music_queue) > 0:
-            song = self.music_queue.pop(0)
-            url = song['url']
-            self.current_requester = song['requester']
+        if self.queue:
+            song = self.queue.pop(0)
+            url, self.current_requester = song['url'], song['requester']
             print(f"Играем заказ из очереди: {url}")
         else:
             url, topic = get_random_youtube()
@@ -54,126 +78,84 @@ class MusicCog(commands.Cog):
                 self.bot.loop.call_later(5, self.play_next_song)
                 return
 
-        try:
-            data = ytdl.extract_info(url, download=False)
-            audio_url = data['url']
-            
-            def after_playing(e):
-                self.bot.loop.call_soon_threadsafe(self.play_next_song, e)
+        def after_playing(e):
+            if e:
+                print(f"Player error: {e}")
+            self.bot.loop.call_later(2, self.play_next_song)
+
+        async def play():
+            try:
+                player = await YTDLSource.from_url(url, loop=self.bot.loop, stream=True)
+                vc.play(player, after=after_playing)
+            except Exception as e:
+                print(f"Ошибка воспроизведения: {e}")
+                self.bot.loop.call_later(2, self.play_next_song)
                 
-            self.voice_client.play(discord.FFmpegPCMAudio(executable=ffmpeg_path, source=audio_url, **ffmpeg_options), after=after_playing)
-        except Exception as e:
-            print(f"Error playing video: {e}")
-            self.bot.loop.call_later(5, self.play_next_song)
+        asyncio.run_coroutine_threadsafe(play(), self.bot.loop)
 
-    @commands.command(name='join')
-    async def join_command(self, ctx):
-        """Подключает бота к голосовому каналу и запускает фоновую музыку."""
-        if not check_user_allowed(ctx.author, ctx.guild.owner_id):
-            embed = create_embed(description=f"У вас нет прав для этой команды!\nНужны роли: `{get_roles_str()}`", theme="error")
-            await ctx.send(embed=embed)
+    @discord.app_commands.command(name="play", description="Воспроизвести музыку с YouTube")
+    async def play(self, interaction: discord.Interaction, search: str):
+        if not await self.ensure_voice(interaction):
+            return
+            
+        await interaction.response.defer()
+        
+        # Check permissions for /play
+        from utils.config import check_user_allowed, get_roles_str
+        if not check_user_allowed(interaction.user, interaction.guild.owner_id):
+            embed = create_embed(description=f"У вас нет прав!\nНужны роли: `{get_roles_str()}`", theme="error")
+            await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        if not ctx.author.voice:
-            embed = create_embed(description="Сначала зайди в голосовой канал!", theme="error")
-            await ctx.send(embed=embed)
-            return
-
-        channel = ctx.author.voice.channel
-        if self.voice_client and self.voice_client.is_connected():
-            await self.voice_client.move_to(channel)
-        else:
-            self.voice_client = await channel.connect()
+        self.queue.append({'url': search, 'requester': interaction.user.id})
+        
+        vc = self.get_vc(interaction)
+        if not vc.is_playing() and not self.is_playing:
+            self.is_playing = True
             self.play_next_song()
-            
-        embed = create_embed(title="Подключился!", description=f"Канал: **{channel.name}**\nФоновая музыка запущена!\n\nЗаказывай музыку через `!play <название>`", theme="music")
-        await ctx.send(embed=embed)
-
-    @commands.command(name='play')
-    async def play_command(self, ctx, *, query: str):
-        """Ищет песню на YouTube и предлагает выбор (1-5)."""
-        if not self.voice_client or not self.voice_client.is_connected():
-            embed = create_embed(description="Я еще не в канале!\nПусть админ напишет `!join`", theme="error")
-            await ctx.send(embed=embed)
-            return
-
-        embed = create_embed(description=f"Ищу **{query}**...", theme="music")
-        await ctx.send(embed=embed)
-        results = search_youtube_interactive(query)
-
-        if not results:
-            embed = create_embed(description="Ничего не найдено.", theme="error")
-            await ctx.send(embed=embed)
-            return
-
-        msg = "**Выбери трек (напиши цифру от 1 до 5):**\n━━━━━━━━━━━━━━━━━━━━━\n\n"
-        for i, item in enumerate(results, 1):
-            title = item.get('snippet', {}).get('title', 'Без названия')
-            msg += f"**`{i}`**  ▸  {title}\n"
-
-        embed = create_embed(title="Результаты поиска", description=msg, theme="music")
-        await ctx.send(embed=embed)
-
-        def check(m):
-            return m.author == ctx.author and m.channel == ctx.channel and m.content.isdigit()
-
-        try:
-            msg_reply = await self.bot.wait_for('message', check=check, timeout=30.0)
-            choice = int(msg_reply.content)
-            if 1 <= choice <= len(results):
-                selected_video = results[choice - 1]
-                video_id = selected_video.get('id', {}).get('videoId')
-                video_title = selected_video.get('snippet', {}).get('title')
-                url = f"https://www.youtube.com/watch?v={video_id}"
-
-                self.music_queue.append({'url': url, 'requester': ctx.author.id, 'title': video_title})
-                embed = create_embed(title="Добавлено в очередь", description=f"**{video_title}**", theme="success")
-                await ctx.send(embed=embed)
-
-                if self.current_requester == self.bot.user.id and self.voice_client.is_playing():
-                    self.voice_client.stop()
-            else:
-                embed = create_embed(description="Неверный номер. Попробуй заново через `!play`.", theme="error")
-                await ctx.send(embed=embed)
-        except asyncio.TimeoutError:
-            embed = create_embed(description="Время вышло! Ты не выбрал трек.\nНапиши `!play` снова.", theme="error")
-            await ctx.send(embed=embed)
-
-    @commands.command(name='skip')
-    async def skip_command(self, ctx):
-        """Пропускает текущую песню. Только для заказчика или админа."""
-        if not check_user_allowed(ctx.author, ctx.guild.owner_id):
-            embed = create_embed(description=f"У вас нет прав для этой команды!\nНужны роли: `{get_roles_str()}`", theme="error")
-            await ctx.send(embed=embed)
-            return
-            
-        if not self.voice_client or not self.voice_client.is_playing():
-            embed = create_embed(description="Сейчас ничего не играет!", theme="error")
-            await ctx.send(embed=embed)
-            return
-
-        if self.current_requester == self.bot.user.id or self.current_requester == ctx.author.id or ctx.author.id == ctx.guild.owner_id:
-            self.voice_client.stop()
-            embed = create_embed(title="Трек пропущен", description="Включаю следующий...", theme="music")
-            await ctx.send(embed=embed)
+            embed = create_embed(description=f"🎵 Начинаем воспроизведение: **{search}**", theme="youtube")
         else:
-            embed = create_embed(description="Ты не можешь пропустить чужой заказ!", theme="error")
-            await ctx.send(embed=embed)
+            embed = create_embed(description=f"➕ Добавлено в очередь: **{search}**", theme="info")
+            
+        await interaction.followup.send(embed=embed)
 
-    @commands.command(name='stop')
-    async def stop_command(self, ctx):
-        """Останавливает бота и очищает очередь."""
-        if not check_user_allowed(ctx.author, ctx.guild.owner_id):
-            embed = create_embed(description=f"У вас нет прав для этой команды!\nНужны роли: `{get_roles_str()}`", theme="error")
-            await ctx.send(embed=embed)
+    @discord.app_commands.command(name="skip", description="Пропустить текущий трек")
+    async def skip(self, interaction: discord.Interaction):
+        vc = self.get_vc(interaction)
+        if not vc or not vc.is_playing():
+            await interaction.response.send_message(embed=create_embed(description="Сейчас ничего не играет!", theme="error"), ephemeral=True)
             return
             
-        self.music_queue.clear()
-        if self.voice_client and self.voice_client.is_connected():
-            await self.voice_client.disconnect()
-            self.voice_client = None
-            embed = create_embed(title="Отключился", description="Очередь очищена!", theme="music")
-            await ctx.send(embed=embed)
+        from utils.config import check_user_allowed, get_roles_str
+        if self.current_requester == interaction.user.id or check_user_allowed(interaction.user, interaction.guild.owner_id):
+            vc.stop()
+            await interaction.response.send_message(embed=create_embed(description="⏭️ Трек пропущен!", theme="success"))
+        else:
+            embed = create_embed(description=f"Вы не можете пропустить этот трек!\nНужны роли: `{get_roles_str()}`", theme="error")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.app_commands.command(name="stop", description="Остановить музыку и очистить очередь")
+    async def stop(self, interaction: discord.Interaction):
+        from utils.config import check_user_allowed, get_roles_str
+        if not check_user_allowed(interaction.user, interaction.guild.owner_id):
+            embed = create_embed(description=f"У вас нет прав!\nНужны роли: `{get_roles_str()}`", theme="error")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+            
+        vc = self.get_vc(interaction)
+        if vc:
+            self.queue.clear()
+            self.is_playing = False
+            vc.stop()
+            await vc.disconnect()
+            await interaction.response.send_message(embed=create_embed(description="🛑 Музыка остановлена, бот покинул канал.", theme="success"))
+        else:
+            await interaction.response.send_message(embed=create_embed(description="Бот не в голосовом канале!", theme="error"), ephemeral=True)
+
+    @discord.app_commands.command(name="join", description="Присоединиться к голосовому каналу")
+    async def join(self, interaction: discord.Interaction):
+        if await self.ensure_voice(interaction):
+            await interaction.response.send_message(embed=create_embed(description="✅ Подключился к вашему голосовому каналу!", theme="success"))
 
 async def setup(bot):
     await bot.add_cog(MusicCog(bot))
