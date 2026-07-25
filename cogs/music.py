@@ -71,7 +71,8 @@ class MusicCog(commands.Cog):
             url, self.current_requester = song['url'], song['requester']
             print(f"Играем заказ из очереди: {url}")
         else:
-            url, topic = get_random_youtube()
+            data = get_random_youtube()
+            url, topic = data.get("url"), data.get("topic")
             self.current_requester = self.bot.user.id
             print(f"Очередь пуста. Включаем фоновую музыку: {url} (Тема: {topic})")
             if not url:

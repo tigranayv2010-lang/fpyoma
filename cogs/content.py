@@ -71,6 +71,7 @@ class TopicSelect(discord.ui.Select):
     def __init__(self, platform: str):
         self.platform = platform
         
+        # Load topics dynamically
         topics = load_topics(platform)
         if not topics:
             topics = ["random"]
@@ -78,7 +79,7 @@ class TopicSelect(discord.ui.Select):
         options = [discord.SelectOption(label="Случайная тема", value="random", emoji="🎲")]
         options.extend([discord.SelectOption(label=t, value=t) for t in topics[:24]])
             
-        super().__init__(placeholder=f"Выбери тему для {platform}", options=options)
+        super().__init__(placeholder=f"Выбери тему для {platform}", options=options, custom_id=f"select_topic_{platform}")
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -89,11 +90,12 @@ class TopicSelect(discord.ui.Select):
         if not platform_info:
             return
             
-        url, topic = platform_info["func"](query)
-        if not url:
-            await interaction.followup.send(embed=create_embed(description=f"Ошибка при получении контента для {self.platform}.", theme="error"))
+        data = platform_info["func"](query)
+        if not data or not data.get("url"):
+            await interaction.followup.send(embed=create_embed(description=f"Ошибка при получении контента для {self.platform}.", theme="error"), ephemeral=True)
             return
             
+        url, topic, title, thumb = data.get("url"), data.get("topic"), data.get("title"), data.get("thumbnail")
         cfg = load_config()
         target_id = cfg.get("nsfw_channel_id") if self.platform == "Nekos" else cfg.get("main_channel_id")
         channel = interaction.client.get_channel(target_id) if target_id else None
@@ -103,43 +105,46 @@ class TopicSelect(discord.ui.Select):
             return
 
         desc = f"**Тема:** {topic}\n\n[▶ Открыть контент]({url})\n\n{url}" if platform_info["type"] == "video" else f"**Тема:** {topic}"
-        embed = create_embed(title=platform_info["title"], description=desc, theme=platform_info["theme"])
+        embed_title = title if title else platform_info["title"]
+        embed = create_embed(title=embed_title, description=desc, theme=platform_info["theme"])
         
         if platform_info["type"] == "image":
             embed.set_image(url=url)
+        if thumb:
+            embed.set_thumbnail(url=thumb)
             
         await channel.send(embed=embed)
         await interaction.followup.send(embed=create_embed(description=f"✅ Успешно отправлено в <#{target_id}>", theme="success"), ephemeral=True)
 
 class TopicSelectView(discord.ui.View):
     def __init__(self, platform: str):
-        super().__init__(timeout=60)
+        super().__init__(timeout=None)
         self.add_item(TopicSelect(platform))
 
 class SendPlatformView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=60)
+        super().__init__(timeout=None)
 
     async def handle_platform(self, interaction: discord.Interaction, platform: str):
         await interaction.response.send_message(f"Выбери тему для **{platform}**:", view=TopicSelectView(platform), ephemeral=True)
 
-    @discord.ui.button(label="YouTube", style=discord.ButtonStyle.primary, emoji=discord.PartialEmoji.from_str("<:youtube:1530525984942588027>"))
+    @discord.ui.button(label="YouTube", style=discord.ButtonStyle.primary, custom_id="send_yt", emoji=discord.PartialEmoji.from_str("<:youtube:1530525984942588027>"))
     async def btn_yt(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_platform(interaction, "YouTube")
 
-    @discord.ui.button(label="TikTok", style=discord.ButtonStyle.primary, emoji=discord.PartialEmoji.from_str("<:tiktok:1530525976797380638>"))
+    @discord.ui.button(label="TikTok", style=discord.ButtonStyle.primary, custom_id="send_tt", emoji=discord.PartialEmoji.from_str("<:tiktok:1530525976797380638>"))
     async def btn_tt(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_platform(interaction, "TikTok")
 
-    @discord.ui.button(label="Pixabay", style=discord.ButtonStyle.success, emoji=discord.PartialEmoji.from_str("<:pinterest:1530525972540166244>"))
+    @discord.ui.button(label="Pixabay", style=discord.ButtonStyle.success, custom_id="send_px", emoji=discord.PartialEmoji.from_str("<:pinterest:1530525972540166244>"))
     async def btn_px(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_platform(interaction, "Pixabay")
 
-    @discord.ui.button(label="Nekos", style=discord.ButtonStyle.danger, emoji=discord.PartialEmoji.from_str("<:18:1530525967297020035>"))
+    @discord.ui.button(label="Nekos", style=discord.ButtonStyle.danger, custom_id="send_nk", emoji=discord.PartialEmoji.from_str("<:18:1530525967297020035>"))
     async def btn_nk(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_platform(interaction, "Nekos")
         
-    @discord.ui.button(label="Anime", style=discord.ButtonStyle.secondary, emoji=discord.PartialEmoji.from_str("<:animejpg:1530526067939479654>"))
+    @discord.ui.button(label="Anime", style=discord.ButtonStyle.secondary, custom_id="send_an", emoji=discord.PartialEmoji.from_str("<:animejpg:1530526067939479654>"))
     async def btn_an(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         
@@ -151,7 +156,8 @@ class SendPlatformView(discord.ui.View):
             await interaction.followup.send(embed=create_embed(description="Основной канал не настроен!", theme="error"), ephemeral=True)
             return
             
-        url, topic = get_random_anime_image()
+        data = get_random_anime_image()
+        url, topic = data.get("url"), data.get("topic")
         if url:
             embed = create_embed(title="Аниме Арт", description=f"**Тема:** {topic}", image_url=url, theme="anime")
             await channel.send(embed=embed)
@@ -190,7 +196,8 @@ async def auto_post_loop(bot_instance):
     if not target_channel:
         return
         
-    url, topic = func()
+    data = func()
+    url, topic, title, thumb = data.get("url"), data.get("topic"), data.get("title"), data.get("thumbnail")
     if not url:
         return
         
@@ -201,9 +208,13 @@ async def auto_post_loop(bot_instance):
     elif platform == "Nekos":
         embed = create_embed(title="18+ Контент!", description=f"**Тема:** {topic}", image_url=url, theme="nekos")
     elif platform == "TikTok":
-        embed = create_embed(title="Свежий TikTok!", description=f"**Тема:** {topic}\n\n[▶ Открыть TikTok]({url})\n\n{url}", theme="tiktok")
+        embed_title = title if title else "Свежий TikTok!"
+        embed = create_embed(title=embed_title, description=f"**Тема:** {topic}\n\n[▶ Открыть TikTok]({url})\n\n{url}", theme="tiktok")
+        if thumb: embed.set_thumbnail(url=thumb)
     else:
-        embed = create_embed(title="Зацени видео!", description=f"**Тема:** {topic}\n\n[▶ Открыть YouTube]({url})\n\n{url}", theme="youtube")
+        embed_title = title if title else "Зацени видео!"
+        embed = create_embed(title=embed_title, description=f"**Тема:** {topic}\n\n[▶ Открыть YouTube]({url})\n\n{url}", theme="youtube")
+        if thumb: embed.set_thumbnail(url=thumb)
         
     await target_channel.send(embed=embed)
 
@@ -220,6 +231,11 @@ async def setup(bot):
             
         @commands.Cog.listener()
         async def on_ready(self):
+            # Register persistent views
+            self.bot.add_view(SendPlatformView())
+            for plat in ["YouTube", "TikTok", "Pixabay", "Nekos"]:
+                self.bot.add_view(TopicSelectView(plat))
+                
             if not auto_post_loop.is_running():
                 cfg = load_config()
                 auto_post_loop.change_interval(hours=cfg.get("auto_post_interval_hours", 2))
