@@ -1,3 +1,4 @@
+import urllib.parse
 import requests
 import random
 import os
@@ -23,7 +24,7 @@ def get_random_anime_image(query: str = None) -> dict:
 def get_random_tiktok(query: str = None) -> dict:
     topics = load_topics("TikTok")
     topic = query or (random.choice(topics) if topics else None)
-    url = f"https://www.tikwm.com/api/feed/search?keywords={topic}&count=10" if topic else "https://www.tikwm.com/api/feed/list?region=RU&count=10"
+    url = f"https://www.tikwm.com/api/feed/search?keywords={urllib.parse.quote(topic)}&count=10" if topic else "https://www.tikwm.com/api/feed/list?region=RU&count=10"
     
     data = _fetch(url)
     if not data: return {}
@@ -45,7 +46,7 @@ def get_random_tiktok(query: str = None) -> dict:
 def get_random_pixabay(query: str = None) -> dict:
     if not PIXABAY_API_KEY: return {}
     topic = query or random.choice(load_topics("Pixabay"))
-    data = _fetch(f"https://pixabay.com/api/?key={PIXABAY_API_KEY}&q={topic}&image_type=photo&per_page=20")
+    data = _fetch(f"https://pixabay.com/api/?key={PIXABAY_API_KEY}&q={urllib.parse.quote(topic)}&image_type=photo&per_page=20")
     
     hits = data.get('hits', []) if data else []
     if hits:
@@ -57,8 +58,8 @@ def get_random_nekos_nsfw(query: str = None) -> dict:
     topic = query or random.choice(load_topics("Nekos"))
     tag = topic.strip().lower()
     
-    data = _fetch(f"https://api.nekosapi.com/v4/images/random?rating=explicit&tag={tag}&limit=1", timeout=10)
-    if not data or not data.get(0):
+    data = _fetch(f"https://api.nekosapi.com/v4/images/random?rating=explicit&tag={urllib.parse.quote(tag)}&limit=1", timeout=10)
+    if not data or not isinstance(data, list) or len(data) == 0:
         data = _fetch("https://api.nekosapi.com/v4/images/random?rating=explicit&limit=1", timeout=10)
         
-    return {"url": data[0].get('url'), "topic": tag} if data and data.get(0) else {}
+    return {"url": data[0].get('url'), "topic": tag} if data and isinstance(data, list) and len(data) > 0 else {}
