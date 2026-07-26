@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from utils.ui import create_embed
-from utils.config import load_config, save_config
+from utils.config import load_config, save_config, check_user_allowed
 
 class SetupChannelModal(discord.ui.Modal, title='Настройка каналов'):
     main_ch = discord.ui.TextInput(label='ID основного канала', required=False)
@@ -85,8 +85,8 @@ class SetupView(discord.ui.View):
 
 @discord.app_commands.command(name="setup", description="Настройка бота")
 async def setup_command(interaction: discord.Interaction):
-    if interaction.user.id != interaction.guild.owner_id:
-        return await interaction.response.send_message(embed=create_embed("Только владелец!", theme="error"), ephemeral=True)
+    if not check_user_allowed(interaction.user, interaction.guild.owner_id):
+        return await interaction.response.send_message(embed=create_embed("Нет доступа!", theme="error"), ephemeral=True)
         
     cfg = load_config()
     main_id = cfg.get('main_channel_id')
