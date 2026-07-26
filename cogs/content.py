@@ -126,7 +126,6 @@ class SendPlatformView(discord.ui.View):
         data = await asyncio.to_thread(get_random_anime_image)
         if data:
             await send_media(channel, data)
-            await interaction.followup.send(f"✅ Отправлено в <#{tid}>", ephemeral=True)
         else:
             await interaction.followup.send("Ошибка API", ephemeral=True)
 
@@ -148,6 +147,8 @@ async def send_command(interaction: discord.Interaction, platform: str, topic: s
         return await interaction.followup.send("Ошибка API", ephemeral=True)
         
     await send_media(interaction.channel, data)
+    try: await interaction.delete_original_response()
+    except: pass
 
 @tasks.loop(minutes=120)
 async def auto_post_loop(bot_instance):
