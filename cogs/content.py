@@ -187,7 +187,7 @@ class SendPlatformView(discord.ui.View):
                 await channel.send(file=file_attachment)
             else:
                 await channel.send(content=url)
-            await interaction.followup.send(embed=create_embed(description=f"✅ Отправлено в <#{target_id}>", theme="success"), ephemeral=True)
+            await interaction.followup.send(f"✅ Отправлено в <#{target_id}>", ephemeral=True)
         else:
             await interaction.followup.send(embed=create_embed(description="Ошибка при получении Аниме.", theme="error"), ephemeral=True)
 
