@@ -35,16 +35,32 @@ class SetupIntervalModal(discord.ui.Modal, title='Интервал авто-по
             await interaction.response.send_message(embed=create_embed("❌ Введите корректное положительное число.", theme="error"), ephemeral=True)
 
 class SetupRolesModal(discord.ui.Modal, title='Роли управления'):
-    roles_input = discord.ui.TextInput(label='Названия (через запятую)', required=True)
+    roles_input = discord.ui.TextInput(label='ID ролей (через запятую)', required=True)
     
     async def on_submit(self, interaction: discord.Interaction):
-        roles = [r.strip() for r in self.roles_input.value.split(',')]
+        role_ids = []
+        for r in self.roles_input.value.split(','):
+            r = r.strip()
+            if r.isdigit():
+                role_ids.append(int(r))
+        
+        if not role_ids:
+            return await interaction.response.send_message(
+                embed=create_embed("❌ Введите хотя бы один корректный ID роли.", theme="error"), ephemeral=True
+            )
         
         cfg = load_config()
-        cfg["allowed_roles"] = [r for r in roles if r] or ["Content"]
+        cfg["allowed_role_ids"] = role_ids
         save_config(cfg)
         
-        await interaction.response.send_message(embed=create_embed(f"✅ Роли обновлены: `{', '.join(cfg['allowed_roles'])}`", theme="success"), ephemeral=True)
+        names = []
+        for rid in role_ids:
+            role = interaction.guild.get_role(rid)
+            names.append(f"{role.name} ({rid})" if role else str(rid))
+        
+        await interaction.response.send_message(
+            embed=create_embed(f"✅ Роли обновлены:\n{chr(10).join(names)}", theme="success"), ephemeral=True
+        )
 
 class SetupView(discord.ui.View):
     def __init__(self): super().__init__(timeout=120)
@@ -65,7 +81,7 @@ class SetupView(discord.ui.View):
     @discord.ui.button(label="Роли", style=discord.ButtonStyle.success, emoji="👥")
     async def btn_roles(self, interaction: discord.Interaction, button: discord.ui.Button):
         modal = SetupRolesModal()
-        modal.roles_input.default = ", ".join(load_config().get("allowed_roles", ["Content"]))
+        modal.roles_input.default = ", ".join(str(i) for i in load_config().get("allowed_role_ids", []))
         await interaction.response.send_modal(modal)
 
 @discord.app_commands.command(name="setup", description="Настройка бота")
@@ -82,7 +98,7 @@ async def setup_command(interaction: discord.Interaction):
         f"📺 **Основной:** {main_str}\n"
         f"<:18:1530644654758826155> **NSFW:** {nsfw_str}\n"
         f"⏱️ **Интервал:** {cfg.get('auto_post_interval_minutes', 120)} мин.\n"
-        f"👥 **Роли:** `{', '.join(cfg.get('allowed_roles', ['Content']))}`\n\n"
+        f"👥 **Роли:** {' '.join(f'<@&{rid}>' for rid in cfg.get('allowed_role_ids', [])) or 'Не установлены'}\n\n"
         "Выберите настройку:"
     )
     await interaction.response.send_message(embed=create_embed(desc, "Настройки", "settings"), view=SetupView(), ephemeral=True)

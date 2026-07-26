@@ -12,7 +12,7 @@ DEFAULT_CONFIG = {
     "main_channel_id": int(os.getenv("TARGET_CHANNEL_ID")) if os.getenv("TARGET_CHANNEL_ID") else None,
     "nsfw_channel_id": None,
     "auto_post_interval_minutes": 120,
-    "allowed_roles": ["Content"]
+    "allowed_role_ids": []
 }
 
 DEFAULT_TOPICS = {
@@ -49,8 +49,16 @@ def save_topics(platform: str, topics_list: list[str]):
 
 def check_user_allowed(user: discord.Member | discord.User, guild_owner_id: int) -> bool:
     if user.id == guild_owner_id: return True
-    allowed = {r.lower() for r in load_config().get("allowed_roles", ["Content"])}
-    return any(role.name.lower() in allowed for role in getattr(user, "roles", []))
+    allowed = set(load_config().get("allowed_role_ids", []))
+    return any(role.id in allowed for role in getattr(user, "roles", []))
 
-def get_roles_str() -> str:
-    return ", ".join(load_config().get("allowed_roles", ["Content"]))
+def get_roles_str(guild: discord.Guild = None) -> str:
+    ids = load_config().get("allowed_role_ids", [])
+    if not ids: return "Не установлены"
+    if guild:
+        names = []
+        for rid in ids:
+            role = guild.get_role(rid)
+            names.append(role.name if role else str(rid))
+        return ", ".join(names)
+    return ", ".join(str(i) for i in ids)
