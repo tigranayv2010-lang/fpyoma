@@ -27,8 +27,7 @@ class SetupIntervalModal(discord.ui.Modal, title='Интервал авто-по
             save_config(cfg)
             
             if cog := interaction.client.get_cog("ContentCog"):
-                from cogs.content import auto_post_loop
-                auto_post_loop.change_interval(minutes=val)
+                cog.auto_post.change_interval(minutes=val)
                 
             await interaction.response.send_message(embed=create_embed(f"✅ Интервал установлен на {val} минут.", theme="success"), ephemeral=True)
         except ValueError:

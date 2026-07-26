@@ -184,55 +184,58 @@ async def send_command(interaction: discord.Interaction, platform: str, topic: s
     except Exception:
         pass
 
-@tasks.loop(minutes=120)
-async def auto_post_loop(bot_instance):
-    cfg = load_config()
-    main_ch = bot_instance.get_channel(cfg.get("main_channel_id", 0))
-    nsfw_ch = bot_instance.get_channel(cfg.get("nsfw_channel_id", 0))
-    
-    choices = []
-    if main_ch:
-        choices += [("TikTok", main_ch), ("Pixabay", main_ch), ("Anime", main_ch)]
-    if nsfw_ch:
-        choices.append(("Nekos", nsfw_ch))
-    
-    if not choices:
-        print("auto_post: нет настроенных каналов, пропуск")
-        return
-    
-    platform, channel = random.choice(choices)
-    print(f"auto_post: отправляю {platform}")
-    
-    try:
-        data = await asyncio.to_thread(PLATFORM_HANDLERS[platform])
-        if data:
-            await send_media(channel, data)
-            print(f"auto_post: {platform} отправлен успешно")
-        else:
-            print(f"auto_post: {platform} — API вернул пустой результат")
-    except Exception as e:
-        print(f"auto_post error: {e}")
-
-@auto_post_loop.before_loop
-async def before_auto_post(bot_instance):
-    await bot_instance.wait_until_ready()
-
 async def setup(bot):
     class ContentCog(commands.Cog):
         def __init__(self, bot):
             self.bot = bot
             for cmd in [topics_command, panel_command, send_command]:
                 self.bot.tree.add_command(cmd)
-            
+
+        @tasks.loop(minutes=120)
+        async def auto_post(self):
+            cfg = load_config()
+            main_ch = self.bot.get_channel(cfg.get("main_channel_id", 0))
+            nsfw_ch = self.bot.get_channel(cfg.get("nsfw_channel_id", 0))
+
+            choices = []
+            if main_ch:
+                choices += [("TikTok", main_ch), ("Pixabay", main_ch), ("Anime", main_ch)]
+            if nsfw_ch:
+                choices.append(("Nekos", nsfw_ch))
+
+            if not choices:
+                print("auto_post: нет настроенных каналов, пропуск")
+                return
+
+            platform, channel = random.choice(choices)
+            print(f"auto_post: отправляю {platform}")
+
+            try:
+                data = await asyncio.to_thread(PLATFORM_HANDLERS[platform])
+                if data:
+                    await send_media(channel, data)
+                    print(f"auto_post: {platform} отправлен успешно")
+                else:
+                    print(f"auto_post: {platform} — API вернул пустой результат")
+            except Exception as e:
+                print(f"auto_post error: {e}")
+
+        @auto_post.before_loop
+        async def before_auto_post(self):
+            await self.bot.wait_until_ready()
+
         @commands.Cog.listener()
         async def on_ready(self):
             self.bot.add_view(SendPlatformView())
-            if not auto_post_loop.is_running():
+            if not self.auto_post.is_running():
                 interval = load_config().get("auto_post_interval_minutes", 120)
-                auto_post_loop.change_interval(minutes=interval)
-                auto_post_loop.start(self.bot)
+                self.auto_post.change_interval(minutes=interval)
+                self.auto_post.start()
                 print(f"auto_post запущен с интервалом {interval} мин.")
-                
+
+        async def cog_unload(self):
+            self.auto_post.cancel()
+
         async def interaction_check(self, interaction: discord.Interaction) -> bool:
             if getattr(interaction.command, "name", "") == "send":
                 return True
