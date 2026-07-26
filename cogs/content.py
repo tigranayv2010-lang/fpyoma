@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 import random
-from utils.ui import create_embed
+from utils.ui import create_embed, EMBED_THEMES
 from utils.config import load_config, load_topics, save_topics
 from utils.api import get_random_anime_image, get_random_tiktok, get_random_youtube, get_random_pixabay, get_random_nekos_nsfw
 import asyncio
@@ -42,19 +42,19 @@ class TopicView(discord.ui.View):
     async def handle_button(self, interaction: discord.Interaction, platform: str):
         await interaction.response.send_modal(TopicModal(platform))
 
-    @discord.ui.button(label="YouTube", style=discord.ButtonStyle.primary, custom_id="btn_yt", emoji=discord.PartialEmoji.from_str("<:youtube:1530525984942588027>"))
+    @discord.ui.button(label="YouTube", style=discord.ButtonStyle.primary, custom_id="btn_yt", emoji=EMBED_THEMES["youtube"]["emoji"])
     async def btn_yt(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_button(interaction, "YouTube")
 
-    @discord.ui.button(label="TikTok", style=discord.ButtonStyle.primary, custom_id="btn_tt", emoji=discord.PartialEmoji.from_str("<:tiktok:1530525976797380638>"))
+    @discord.ui.button(label="TikTok", style=discord.ButtonStyle.primary, custom_id="btn_tt", emoji=EMBED_THEMES["tiktok"]["emoji"])
     async def btn_tt(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_button(interaction, "TikTok")
         
-    @discord.ui.button(label="Pixabay", style=discord.ButtonStyle.primary, custom_id="btn_px", emoji=discord.PartialEmoji.from_str("<:pinterest:1530525972540166244>"))
+    @discord.ui.button(label="Pixabay", style=discord.ButtonStyle.primary, custom_id="btn_px", emoji=EMBED_THEMES["pixabay"]["emoji"])
     async def btn_px(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_button(interaction, "Pixabay")
         
-    @discord.ui.button(label="Nekos", style=discord.ButtonStyle.danger, custom_id="btn_nk", emoji=discord.PartialEmoji.from_str("<:18:1530525967297020035>"))
+    @discord.ui.button(label="Nekos", style=discord.ButtonStyle.danger, custom_id="btn_nk", emoji=EMBED_THEMES["nekos"]["emoji"])
     async def btn_nk(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_button(interaction, "Nekos")
 
@@ -160,23 +160,23 @@ class SendPlatformView(discord.ui.View):
     async def handle_platform(self, interaction: discord.Interaction, platform: str):
         await interaction.response.send_message(f"Выбери тему для **{platform}**:", view=TopicSelectView(platform), ephemeral=True)
 
-    @discord.ui.button(label="YouTube", style=discord.ButtonStyle.primary, custom_id="send_yt", emoji=discord.PartialEmoji.from_str("<:youtube:1530525984942588027>"))
+    @discord.ui.button(label="YouTube", style=discord.ButtonStyle.primary, custom_id="send_yt", emoji=EMBED_THEMES["youtube"]["emoji"])
     async def btn_yt(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_platform(interaction, "YouTube")
 
-    @discord.ui.button(label="TikTok", style=discord.ButtonStyle.primary, custom_id="send_tt", emoji=discord.PartialEmoji.from_str("<:tiktok:1530525976797380638>"))
+    @discord.ui.button(label="TikTok", style=discord.ButtonStyle.primary, custom_id="send_tt", emoji=EMBED_THEMES["tiktok"]["emoji"])
     async def btn_tt(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_platform(interaction, "TikTok")
 
-    @discord.ui.button(label="Pixabay", style=discord.ButtonStyle.success, custom_id="send_px", emoji=discord.PartialEmoji.from_str("<:pinterest:1530525972540166244>"))
+    @discord.ui.button(label="Pixabay", style=discord.ButtonStyle.success, custom_id="send_px", emoji=EMBED_THEMES["pixabay"]["emoji"])
     async def btn_px(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_platform(interaction, "Pixabay")
 
-    @discord.ui.button(label="Nekos", style=discord.ButtonStyle.danger, custom_id="send_nk", emoji=discord.PartialEmoji.from_str("<:18:1530525967297020035>"))
+    @discord.ui.button(label="Nekos", style=discord.ButtonStyle.danger, custom_id="send_nk", emoji=EMBED_THEMES["nekos"]["emoji"])
     async def btn_nk(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_platform(interaction, "Nekos")
         
-    @discord.ui.button(label="Anime", style=discord.ButtonStyle.secondary, custom_id="send_an", emoji=discord.PartialEmoji.from_str("<:animejpg:1530526067939479654>"))
+    @discord.ui.button(label="Anime", style=discord.ButtonStyle.secondary, custom_id="send_an", emoji=EMBED_THEMES["anime"]["emoji"])
     async def btn_an(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         
@@ -202,9 +202,9 @@ class SendPlatformView(discord.ui.View):
 async def send_command(interaction: discord.Interaction):
     desc = (
         "━━━━━━━━━━━━━━━━━━━━━\n"
-        "<:youtube:1530525984942588027>  **YouTube**  │  <:tiktok:1530525976797380638>  **TikTok**\n"
-        "<:pinterest:1530525972540166244>  **Pixabay**  │  <:18:1530525967297020035>  **Nekos 18+**\n"
-        "<:animejpg:1530526067939479654>  **Anime**\n"
+        f"{EMBED_THEMES['youtube']['emoji']}  **YouTube**  │  {EMBED_THEMES['tiktok']['emoji']}  **TikTok**\n"
+        f"{EMBED_THEMES['pixabay']['emoji']}  **Pixabay**  │  {EMBED_THEMES['nekos']['emoji']}  **Nekos 18+**\n"
+        f"{EMBED_THEMES['anime']['emoji']}  **Anime**\n"
         "━━━━━━━━━━━━━━━━━━━━━\n\n"
         "Выбери платформу ниже и отправь контент в чат:"
     )

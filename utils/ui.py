@@ -1,12 +1,13 @@
 import discord
 from datetime import datetime
+import os
 
 EMBED_THEMES = {
-    "youtube":  {"color": 0xFF0000, "emoji": "<:youtube:1530525984942588027>", "name": "YouTube"},
-    "tiktok":   {"color": 0x00F2EA, "emoji": "<:tiktok:1530525976797380638>", "name": "TikTok"},
-    "pixabay":  {"color": 0x2EC866, "emoji": "<:pinterest:1530525972540166244>", "name": "Pixabay"},
-    "nekos":    {"color": 0xFF69B4, "emoji": "<:18:1530525967297020035>", "name": "Nekos 18+"},
-    "anime":    {"color": 0xE91E63, "emoji": "<:animejpg:1530526067939479654>", "name": "Anime Art"},
+    "youtube":  {"color": 0xFF0000, "emoji": os.getenv("EMOJI_YOUTUBE", "📺"), "name": "YouTube"},
+    "tiktok":   {"color": 0x00F2EA, "emoji": os.getenv("EMOJI_TIKTOK", "📱"), "name": "TikTok"},
+    "pixabay":  {"color": 0x2EC866, "emoji": os.getenv("EMOJI_PIXABAY", "🖼️"), "name": "Pixabay"},
+    "nekos":    {"color": 0xFF69B4, "emoji": os.getenv("EMOJI_NEKOS", "🔞"), "name": "Nekos 18+"},
+    "anime":    {"color": 0xE91E63, "emoji": os.getenv("EMOJI_ANIME", "🌸"), "name": "Anime Art"},
     "music":    {"color": 0x9B59B6, "emoji": "🎵", "name": "Music Player"},
     "settings": {"color": 0x3498DB, "emoji": "⚙️", "name": "Настройки"},
     "success":  {"color": 0x2ECC71, "emoji": "✅", "name": "Успех"},
