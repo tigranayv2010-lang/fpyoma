@@ -198,8 +198,8 @@ class SendPlatformView(discord.ui.View):
         else:
             await interaction.followup.send(embed=create_embed(description="Ошибка при получении Аниме.", theme="error"), ephemeral=True)
 
-@discord.app_commands.command(name="send", description="Отправить контент в чат с выбором темы")
-async def send_command(interaction: discord.Interaction):
+@discord.app_commands.command(name="panel", description="Панель администратора для отправки контента")
+async def panel_command(interaction: discord.Interaction):
     desc = (
         "━━━━━━━━━━━━━━━━━━━━━\n"
         f"{EMBED_THEMES['youtube']['emoji']}  **YouTube**  │  {EMBED_THEMES['tiktok']['emoji']}  **TikTok**\n"
@@ -208,7 +208,72 @@ async def send_command(interaction: discord.Interaction):
         "━━━━━━━━━━━━━━━━━━━━━\n\n"
         "Выбери платформу ниже и отправь контент в чат:"
     )
-    await interaction.response.send_message(embed=create_embed(title="Отправить контент", description=desc), view=SendPlatformView(), ephemeral=False)
+    await interaction.response.send_message(embed=create_embed(title="Панель контента", description=desc), view=SendPlatformView(), ephemeral=False)
+
+@discord.app_commands.command(name="send", description="Отправить контент на выбранную тему")
+@discord.app_commands.choices(platform=[
+    discord.app_commands.Choice(name="YouTube", value="YouTube"),
+    discord.app_commands.Choice(name="TikTok", value="TikTok"),
+    discord.app_commands.Choice(name="Pixabay", value="Pixabay"),
+    discord.app_commands.Choice(name="Nekos (18+)", value="Nekos"),
+    discord.app_commands.Choice(name="Anime", value="Anime")
+])
+async def send_command(interaction: discord.Interaction, platform: str, topic: str):
+    if platform == "Nekos" and not getattr(interaction.channel, "is_nsfw", lambda: False)():
+        embed = create_embed(description="🔞 Этот контент можно запрашивать только в NSFW каналах (18+)!", theme="error")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+        
+    await interaction.response.defer()
+    
+    platform_info = PLATFORM_HANDLERS.get(platform)
+    if not platform_info:
+        await interaction.followup.send("Платформа не найдена.", ephemeral=True)
+        return
+        
+    import asyncio
+    data = await asyncio.to_thread(platform_info["func"], topic)
+    
+    if not data or not data.get("url"):
+        error_embed = create_embed(description=f"Ошибка при получении контента для {platform}.", theme="error")
+        await interaction.followup.send(embed=error_embed, ephemeral=True)
+        return
+        
+    url, actual_topic, title, thumb = data.get("url"), data.get("topic"), data.get("title"), data.get("thumbnail")
+    
+    desc = f"**Тема:** {actual_topic}\n\n[▶ Открыть контент]({url})\n\n{url}" if platform_info["type"] == "video" else f"**Тема:** {actual_topic}"
+    embed_title = title if title else platform_info["title"]
+    embed = create_embed(title=embed_title, description=desc, theme=platform_info["theme"])
+    
+    if platform_info["type"] == "image":
+        embed.set_image(url=url)
+    if thumb:
+        embed.set_thumbnail(url=thumb)
+        
+    download_url = data.get("download_url")
+    file_attachment = None
+    
+    if download_url:
+        import aiohttp
+        import io
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(download_url) as resp:
+                    if resp.status == 200:
+                        video_bytes = await resp.read()
+                        if len(video_bytes) < 25 * 1024 * 1024:
+                            file_attachment = discord.File(fp=io.BytesIO(video_bytes), filename="video.mp4")
+                            embed.description = f"**Тема:** {actual_topic}"
+        except Exception as e:
+            print(f"Ошибка загрузки видеофайла (user /send): {e}")
+            
+    if platform_info["type"] == "video":
+        if file_attachment:
+            await interaction.followup.send(file=file_attachment)
+        else:
+            await interaction.followup.send(content=url)
+    else:
+        await interaction.followup.send(embed=embed)
 
 @tasks.loop(hours=2)
 async def auto_post_loop(bot_instance):
@@ -283,6 +348,7 @@ async def setup(bot):
         def __init__(self, bot):
             self.bot = bot
             self.bot.tree.add_command(topics_command)
+            self.bot.tree.add_command(panel_command)
             self.bot.tree.add_command(send_command)
             
         @commands.Cog.listener()
@@ -299,6 +365,9 @@ async def setup(bot):
                 
         # This acts globally for the cog's app_commands
         async def interaction_check(self, interaction: discord.Interaction) -> bool:
+            if interaction.type == discord.InteractionType.application_command and getattr(interaction.command, "name", "") == "send":
+                return True
+                
             from utils.config import check_user_allowed, get_roles_str
             if not check_user_allowed(interaction.user, interaction.guild.owner_id):
                 embed = create_embed(description=f"У вас нет прав!\nНужны роли: `{get_roles_str()}`", theme="error")
