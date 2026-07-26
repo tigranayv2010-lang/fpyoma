@@ -100,7 +100,7 @@ class TopicSelect(discord.ui.Select):
             await interaction.edit_original_response(content=None, embed=error_embed, view=None)
             return
             
-        download_url = data.get("download_url")
+        download_url = data.get("download_url") or data.get("url")
         file_attachment = None
         
         if download_url:
@@ -110,17 +110,18 @@ class TopicSelect(discord.ui.Select):
                 async with aiohttp.ClientSession() as session:
                     async with session.get(download_url) as resp:
                         if resp.status == 200:
-                            video_bytes = await resp.read()
-                            if len(video_bytes) < 25 * 1024 * 1024:
-                                file_attachment = discord.File(fp=io.BytesIO(video_bytes), filename="video.mp4")
+                            media_bytes = await resp.read()
+                            if len(media_bytes) < 25 * 1024 * 1024:
+                                ext = download_url.split('?')[0].split('.')[-1]
+                                if len(ext) > 4 or not ext.isalnum(): ext = "jpg"
+                                file_attachment = discord.File(fp=io.BytesIO(media_bytes), filename=f"media.{ext}")
             except Exception as e:
                 print(f"Ошибка загрузки файла: {e}")
                 
-        content_text = f"**Тема:** {topic}\n{url}"
         if file_attachment:
-            await channel.send(content=f"**Тема:** {topic}", file=file_attachment)
+            await channel.send(file=file_attachment)
         else:
-            await channel.send(content=content_text)
+            await channel.send(content=url)
             
         try:
             await interaction.delete_original_response()
@@ -165,9 +166,27 @@ class SendPlatformView(discord.ui.View):
             
         import asyncio
         data = await asyncio.to_thread(get_random_anime_image)
-        url, topic = data.get("url"), data.get("topic")
+        url = data.get("url")
         if url:
-            await channel.send(content=f"**Тема:** {topic}\n{url}")
+            import aiohttp
+            import io
+            file_attachment = None
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            media_bytes = await resp.read()
+                            if len(media_bytes) < 25 * 1024 * 1024:
+                                ext = url.split('?')[0].split('.')[-1]
+                                if len(ext) > 4 or not ext.isalnum(): ext = "jpg"
+                                file_attachment = discord.File(fp=io.BytesIO(media_bytes), filename=f"media.{ext}")
+            except Exception:
+                pass
+            
+            if file_attachment:
+                await channel.send(file=file_attachment)
+            else:
+                await channel.send(content=url)
             await interaction.followup.send(embed=create_embed(description=f"✅ Отправлено в <#{target_id}>", theme="success"), ephemeral=True)
         else:
             await interaction.followup.send(embed=create_embed(description="Ошибка при получении Аниме.", theme="error"), ephemeral=True)
@@ -217,7 +236,7 @@ async def send_command(interaction: discord.Interaction, platform: str, topic: s
         
     url, actual_topic = data.get("url"), data.get("topic")
     
-    download_url = data.get("download_url")
+    download_url = data.get("download_url") or data.get("url")
     file_attachment = None
     
     if download_url:
@@ -227,17 +246,18 @@ async def send_command(interaction: discord.Interaction, platform: str, topic: s
             async with aiohttp.ClientSession() as session:
                 async with session.get(download_url) as resp:
                     if resp.status == 200:
-                        video_bytes = await resp.read()
-                        if len(video_bytes) < 25 * 1024 * 1024:
-                            file_attachment = discord.File(fp=io.BytesIO(video_bytes), filename="video.mp4")
+                        media_bytes = await resp.read()
+                        if len(media_bytes) < 25 * 1024 * 1024:
+                            ext = download_url.split('?')[0].split('.')[-1]
+                            if len(ext) > 4 or not ext.isalnum(): ext = "jpg"
+                            file_attachment = discord.File(fp=io.BytesIO(media_bytes), filename=f"media.{ext}")
         except Exception as e:
-            print(f"Ошибка загрузки видеофайла (user /send): {e}")
+            print(f"Ошибка загрузки файла (user /send): {e}")
             
-    content_text = f"**Тема:** {actual_topic}\n{url}"
     if file_attachment:
-        await interaction.followup.send(content=f"**Тема:** {actual_topic}", file=file_attachment)
+        await interaction.followup.send(file=file_attachment)
     else:
-        await interaction.followup.send(content=content_text)
+        await interaction.followup.send(content=url)
 
 @tasks.loop(minutes=120)
 async def auto_post_loop(bot_instance):
@@ -263,7 +283,7 @@ async def auto_post_loop(bot_instance):
     if not url:
         return
         
-    download_url = data.get("download_url")
+    download_url = data.get("download_url") or data.get("url")
     file_attachment = None
     if download_url:
         import aiohttp
@@ -272,17 +292,18 @@ async def auto_post_loop(bot_instance):
             async with aiohttp.ClientSession() as session:
                 async with session.get(download_url) as resp:
                     if resp.status == 200:
-                        video_bytes = await resp.read()
-                        if len(video_bytes) < 25 * 1024 * 1024:
-                            file_attachment = discord.File(fp=io.BytesIO(video_bytes), filename="video.mp4")
+                        media_bytes = await resp.read()
+                        if len(media_bytes) < 25 * 1024 * 1024:
+                            ext = download_url.split('?')[0].split('.')[-1]
+                            if len(ext) > 4 or not ext.isalnum(): ext = "jpg"
+                            file_attachment = discord.File(fp=io.BytesIO(media_bytes), filename=f"media.{ext}")
         except Exception as e:
-            print(f"Ошибка загрузки видеофайла в авто-посте: {e}")
+            print(f"Ошибка загрузки файла в авто-посте: {e}")
             
-    content_text = f"**Тема:** {topic}\n{url}"
     if file_attachment:
-        await target_channel.send(content=f"**Тема:** {topic}", file=file_attachment)
+        await target_channel.send(file=file_attachment)
     else:
-        await target_channel.send(content=content_text)
+        await target_channel.send(content=url)
 
 @auto_post_loop.before_loop
 async def before_auto_post():
