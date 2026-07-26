@@ -1,7 +1,7 @@
 import json
 import os
-from dotenv import load_dotenv
 import discord
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -16,47 +16,41 @@ DEFAULT_CONFIG = {
 }
 
 DEFAULT_TOPICS = {
-    "YouTube": ["lofi hip hop radio", "chill background music", "gaming mix", "synthwave mix"],
     "TikTok": [],
     "Pixabay": ["nature", "city", "cyberpunk", "animals", "cars"],
     "Nekos": ["girl", "pussy", "large_breasts", "kemonomimi", "exposed_girl_breasts"]
 }
 
-def load_config() -> dict:
+def _load_json(file_path: str, default: dict) -> dict:
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            return {**DEFAULT_CONFIG, **json.load(f)}
+        with open(file_path, "r", encoding="utf-8") as f:
+            return {**default, **json.load(f)}
     except (FileNotFoundError, json.JSONDecodeError):
-        return DEFAULT_CONFIG.copy()
+        return default.copy()
+
+def _save_json(file_path: str, data: dict):
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def load_config() -> dict:
+    return _load_json(CONFIG_FILE, DEFAULT_CONFIG)
 
 def save_config(config_data: dict):
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(config_data, f, ensure_ascii=False, indent=4)
+    _save_json(CONFIG_FILE, config_data)
+
+def load_topics(platform: str) -> list[str]:
+    data = _load_json(TOPICS_FILE, DEFAULT_TOPICS)
+    return data.get(platform, DEFAULT_TOPICS.get(platform, []))
+
+def save_topics(platform: str, topics_list: list[str]):
+    data = _load_json(TOPICS_FILE, DEFAULT_TOPICS)
+    data[platform] = topics_list
+    _save_json(TOPICS_FILE, data)
 
 def check_user_allowed(user: discord.Member | discord.User, guild_owner_id: int) -> bool:
-    if user.id == guild_owner_id:
-        return True
-    
+    if user.id == guild_owner_id: return True
     allowed = {r.lower() for r in load_config().get("allowed_roles", ["Content"])}
     return any(role.name.lower() in allowed for role in getattr(user, "roles", []))
 
 def get_roles_str() -> str:
     return ", ".join(load_config().get("allowed_roles", ["Content"]))
-
-def load_topics(platform: str) -> list[str]:
-    try:
-        with open(TOPICS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f).get(platform, DEFAULT_TOPICS.get(platform, []))
-    except (FileNotFoundError, json.JSONDecodeError):
-        return DEFAULT_TOPICS.get(platform, [])
-
-def save_topics(platform: str, topics_list: list[str]):
-    try:
-        with open(TOPICS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        data = DEFAULT_TOPICS.copy()
-    
-    data[platform] = topics_list
-    with open(TOPICS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
