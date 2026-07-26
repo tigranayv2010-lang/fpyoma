@@ -20,7 +20,7 @@ class SetupChannelModal(discord.ui.Modal, title='Настройка канало
 
 class SetupIntervalModal(discord.ui.Modal, title='Интервал авто-постинга'):
     interval = discord.ui.TextInput(
-        label='Часы (например: 2)',
+        label='Минуты (например: 120)',
         style=discord.TextStyle.short,
         required=True
     )
@@ -31,16 +31,16 @@ class SetupIntervalModal(discord.ui.Modal, title='Интервал авто-по
             if val <= 0: raise ValueError
             
             cfg = load_config()
-            cfg["auto_post_interval_hours"] = val
+            cfg["auto_post_interval_minutes"] = val
             save_config(cfg)
             
             # Update running loop if possible
             cog = interaction.client.get_cog("ContentCog")
             if cog:
                 from cogs.content import auto_post_loop
-                auto_post_loop.change_interval(hours=val)
+                auto_post_loop.change_interval(minutes=val)
                 
-            embed = create_embed(description=f"✅ Интервал авто-поста установлен на {val} часов.", theme="success")
+            embed = create_embed(description=f"✅ Интервал авто-поста установлен на {val} минут.", theme="success")
             await interaction.response.send_message(embed=embed, ephemeral=True)
         except ValueError:
             await interaction.response.send_message(embed=create_embed(description="❌ Пожалуйста, введите корректное положительное число.", theme="error"), ephemeral=True)
@@ -79,7 +79,7 @@ class SetupView(discord.ui.View):
     @discord.ui.button(label="Интервал", style=discord.ButtonStyle.secondary, emoji="⏱️")
     async def btn_interval(self, interaction: discord.Interaction, button: discord.ui.Button):
         modal = SetupIntervalModal()
-        modal.interval.default = str(load_config().get("auto_post_interval_hours", 2))
+        modal.interval.default = str(load_config().get("auto_post_interval_minutes", 120))
         await interaction.response.send_modal(modal)
         
     @discord.ui.button(label="Роли", style=discord.ButtonStyle.success, emoji="👥")
@@ -103,7 +103,7 @@ async def setup_command(interaction: discord.Interaction):
         "━━━━━━━━━━━━━━━━━━━━━\n"
         f"📺 **Основной канал:** {m_ch}\n"
         f"🔞 **NSFW канал:** {n_ch}\n"
-        f"⏱️ **Интервал:** {cfg.get('auto_post_interval_hours', 2)} ч.\n"
+        f"⏱️ **Интервал:** {cfg.get('auto_post_interval_minutes', 120)} мин.\n"
         f"👥 **Роли:** `{', '.join(cfg.get('allowed_roles', ['Content']))}`\n"
         "━━━━━━━━━━━━━━━━━━━━━\n\n"
         "Используйте кнопки ниже для настройки:"

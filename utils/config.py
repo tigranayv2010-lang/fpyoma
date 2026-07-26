@@ -11,7 +11,7 @@ TOPICS_FILE = "topics.json"
 DEFAULT_CONFIG = {
     "main_channel_id": int(os.getenv("TARGET_CHANNEL_ID")) if os.getenv("TARGET_CHANNEL_ID") else None,
     "nsfw_channel_id": None,
-    "auto_post_interval_hours": 2,
+    "auto_post_interval_minutes": 120,
     "allowed_roles": ["Content"]
 }
 

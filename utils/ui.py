@@ -3,7 +3,6 @@ from datetime import datetime
 import os
 
 EMBED_THEMES = {
-    "youtube":  {"color": 0xFF0000, "emoji": os.getenv("EMOJI_YOUTUBE", "📺"), "name": "YouTube"},
     "tiktok":   {"color": 0x00F2EA, "emoji": os.getenv("EMOJI_TIKTOK", "📱"), "name": "TikTok"},
     "pixabay":  {"color": 0x2EC866, "emoji": os.getenv("EMOJI_PIXABAY", "🖼️"), "name": "Pixabay"},
     "nekos":    {"color": 0xFF69B4, "emoji": os.getenv("EMOJI_NEKOS", "🔞"), "name": "Nekos 18+"},

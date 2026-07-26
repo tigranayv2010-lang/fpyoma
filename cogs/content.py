@@ -3,11 +3,10 @@ from discord.ext import commands, tasks
 import random
 from utils.ui import create_embed, EMBED_THEMES
 from utils.config import load_config, load_topics, save_topics
-from utils.api import get_random_anime_image, get_random_tiktok, get_random_youtube, get_random_pixabay, get_random_nekos_nsfw
+from utils.api import get_random_anime_image, get_random_tiktok, get_random_pixabay, get_random_nekos_nsfw
 import asyncio
 
 PLATFORM_HANDLERS = {
-    "YouTube": {"func": get_random_youtube, "title": "Смотри, что нашел", "theme": "youtube", "type": "video"},
     "TikTok": {"func": get_random_tiktok, "title": "Лови TikTok", "theme": "tiktok", "type": "video"},
     "Pixabay": {"func": get_random_pixabay, "title": "Красивое фото", "theme": "pixabay", "type": "image"},
     "Nekos": {"func": get_random_nekos_nsfw, "title": "18+ Контент", "theme": "nekos", "type": "image"}
@@ -42,10 +41,6 @@ class TopicView(discord.ui.View):
     async def handle_button(self, interaction: discord.Interaction, platform: str):
         await interaction.response.send_modal(TopicModal(platform))
 
-    @discord.ui.button(label="YouTube", style=discord.ButtonStyle.primary, custom_id="btn_yt", emoji=EMBED_THEMES["youtube"]["emoji"])
-    async def btn_yt(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.handle_button(interaction, "YouTube")
-
     @discord.ui.button(label="TikTok", style=discord.ButtonStyle.primary, custom_id="btn_tt", emoji=EMBED_THEMES["tiktok"]["emoji"])
     async def btn_tt(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_button(interaction, "TikTok")
@@ -71,12 +66,9 @@ class TopicSelect(discord.ui.Select):
     def __init__(self, platform: str):
         self.platform = platform
         
-        # Load topics dynamically
         topics = load_topics(platform)
-
         options = [discord.SelectOption(label="Случайная тема", value="random", emoji="🎲")]
         if topics:
-            # We filter out "random" just in case it's in the topics list to avoid duplicate values
             filtered_topics = [t for t in topics if t.lower() != "random"]
             options.extend([discord.SelectOption(label=t, value=t) for t in filtered_topics[:24]])
             
@@ -98,7 +90,7 @@ class TopicSelect(discord.ui.Select):
             await interaction.edit_original_response(content=None, embed=error_embed, view=None)
             return
             
-        url, topic, title, thumb = data.get("url"), data.get("topic"), data.get("title"), data.get("thumbnail")
+        url, topic = data.get("url"), data.get("topic")
         cfg = load_config()
         target_id = cfg.get("nsfw_channel_id") if self.platform == "Nekos" else cfg.get("main_channel_id")
         channel = interaction.client.get_channel(target_id) if target_id else None
@@ -107,15 +99,6 @@ class TopicSelect(discord.ui.Select):
             error_embed = create_embed(description=f"Канал для {'NSFW' if self.platform == 'Nekos' else 'основного'} контента не настроен! Используйте `/setup`", theme="error")
             await interaction.edit_original_response(content=None, embed=error_embed, view=None)
             return
-
-        desc = f"**Тема:** {topic}\n\n[▶ Открыть контент]({url})\n\n{url}" if platform_info["type"] == "video" else f"**Тема:** {topic}"
-        embed_title = title if title else platform_info["title"]
-        embed = create_embed(title=embed_title, description=desc, theme=platform_info["theme"])
-        
-        if platform_info["type"] == "image":
-            embed.set_image(url=url)
-        if thumb:
-            embed.set_thumbnail(url=thumb)
             
         download_url = data.get("download_url")
         file_attachment = None
@@ -128,20 +111,16 @@ class TopicSelect(discord.ui.Select):
                     async with session.get(download_url) as resp:
                         if resp.status == 200:
                             video_bytes = await resp.read()
-                            if len(video_bytes) < 25 * 1024 * 1024:  # 25 MB limit
+                            if len(video_bytes) < 25 * 1024 * 1024:
                                 file_attachment = discord.File(fp=io.BytesIO(video_bytes), filename="video.mp4")
-                                # If we successfully downloaded the video, we can remove the video link from the description to make it cleaner
-                                embed.description = f"**Тема:** {topic}"
             except Exception as e:
-                print(f"Ошибка загрузки видеофайла: {e}")
+                print(f"Ошибка загрузки файла: {e}")
                 
-        if platform_info["type"] == "video":
-            if file_attachment:
-                await channel.send(file=file_attachment)
-            else:
-                await channel.send(content=url)
+        content_text = f"**Тема:** {topic}\n{url}"
+        if file_attachment:
+            await channel.send(content=f"**Тема:** {topic}", file=file_attachment)
         else:
-            await channel.send(embed=embed)
+            await channel.send(content=content_text)
             
         try:
             await interaction.delete_original_response()
@@ -159,10 +138,6 @@ class SendPlatformView(discord.ui.View):
 
     async def handle_platform(self, interaction: discord.Interaction, platform: str):
         await interaction.response.send_message(f"Выбери тему для **{platform}**:", view=TopicSelectView(platform), ephemeral=True)
-
-    @discord.ui.button(label="YouTube", style=discord.ButtonStyle.primary, custom_id="send_yt", emoji=EMBED_THEMES["youtube"]["emoji"])
-    async def btn_yt(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.handle_platform(interaction, "YouTube")
 
     @discord.ui.button(label="TikTok", style=discord.ButtonStyle.primary, custom_id="send_tt", emoji=EMBED_THEMES["tiktok"]["emoji"])
     async def btn_tt(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -192,8 +167,7 @@ class SendPlatformView(discord.ui.View):
         data = await asyncio.to_thread(get_random_anime_image)
         url, topic = data.get("url"), data.get("topic")
         if url:
-            embed = create_embed(title="Аниме Арт", description=f"**Тема:** {topic}", image_url=url, theme="anime")
-            await channel.send(embed=embed)
+            await channel.send(content=f"**Тема:** {topic}\n{url}")
             await interaction.followup.send(embed=create_embed(description=f"✅ Отправлено в <#{target_id}>", theme="success"), ephemeral=True)
         else:
             await interaction.followup.send(embed=create_embed(description="Ошибка при получении Аниме.", theme="error"), ephemeral=True)
@@ -202,9 +176,8 @@ class SendPlatformView(discord.ui.View):
 async def panel_command(interaction: discord.Interaction):
     desc = (
         "━━━━━━━━━━━━━━━━━━━━━\n"
-        f"{EMBED_THEMES['youtube']['emoji']}  **YouTube**  │  {EMBED_THEMES['tiktok']['emoji']}  **TikTok**\n"
-        f"{EMBED_THEMES['pixabay']['emoji']}  **Pixabay**  │  {EMBED_THEMES['nekos']['emoji']}  **Nekos 18+**\n"
-        f"{EMBED_THEMES['anime']['emoji']}  **Anime**\n"
+        f"{EMBED_THEMES['tiktok']['emoji']}  **TikTok**  │  {EMBED_THEMES['pixabay']['emoji']}  **Pixabay**\n"
+        f"{EMBED_THEMES['nekos']['emoji']}  **Nekos 18+**  │  {EMBED_THEMES['anime']['emoji']}  **Anime**\n"
         "━━━━━━━━━━━━━━━━━━━━━\n\n"
         "Выбери платформу ниже и отправь контент в чат:"
     )
@@ -212,7 +185,6 @@ async def panel_command(interaction: discord.Interaction):
 
 @discord.app_commands.command(name="send", description="Отправить контент на выбранную тему")
 @discord.app_commands.choices(platform=[
-    discord.app_commands.Choice(name="YouTube", value="YouTube"),
     discord.app_commands.Choice(name="TikTok", value="TikTok"),
     discord.app_commands.Choice(name="Pixabay", value="Pixabay"),
     discord.app_commands.Choice(name="Nekos (18+)", value="Nekos"),
@@ -227,29 +199,24 @@ async def send_command(interaction: discord.Interaction, platform: str, topic: s
     await interaction.response.defer()
     
     platform_info = PLATFORM_HANDLERS.get(platform)
-    if not platform_info:
+    if not platform_info and platform != "Anime":
         await interaction.followup.send("Платформа не найдена.", ephemeral=True)
         return
         
     import asyncio
-    data = await asyncio.to_thread(platform_info["func"], topic)
+    
+    if platform == "Anime":
+        data = await asyncio.to_thread(get_random_anime_image)
+    else:
+        data = await asyncio.to_thread(platform_info["func"], topic)
     
     if not data or not data.get("url"):
         error_embed = create_embed(description=f"Ошибка при получении контента для {platform}.", theme="error")
         await interaction.followup.send(embed=error_embed, ephemeral=True)
         return
         
-    url, actual_topic, title, thumb = data.get("url"), data.get("topic"), data.get("title"), data.get("thumbnail")
+    url, actual_topic = data.get("url"), data.get("topic")
     
-    desc = f"**Тема:** {actual_topic}\n\n[▶ Открыть контент]({url})\n\n{url}" if platform_info["type"] == "video" else f"**Тема:** {actual_topic}"
-    embed_title = title if title else platform_info["title"]
-    embed = create_embed(title=embed_title, description=desc, theme=platform_info["theme"])
-    
-    if platform_info["type"] == "image":
-        embed.set_image(url=url)
-    if thumb:
-        embed.set_thumbnail(url=thumb)
-        
     download_url = data.get("download_url")
     file_attachment = None
     
@@ -263,19 +230,16 @@ async def send_command(interaction: discord.Interaction, platform: str, topic: s
                         video_bytes = await resp.read()
                         if len(video_bytes) < 25 * 1024 * 1024:
                             file_attachment = discord.File(fp=io.BytesIO(video_bytes), filename="video.mp4")
-                            embed.description = f"**Тема:** {actual_topic}"
         except Exception as e:
             print(f"Ошибка загрузки видеофайла (user /send): {e}")
             
-    if platform_info["type"] == "video":
-        if file_attachment:
-            await interaction.followup.send(file=file_attachment)
-        else:
-            await interaction.followup.send(content=url)
+    content_text = f"**Тема:** {actual_topic}\n{url}"
+    if file_attachment:
+        await interaction.followup.send(content=f"**Тема:** {actual_topic}", file=file_attachment)
     else:
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(content=content_text)
 
-@tasks.loop(hours=2)
+@tasks.loop(minutes=120)
 async def auto_post_loop(bot_instance):
     await bot_instance.wait_until_ready()
     cfg = load_config()
@@ -286,7 +250,6 @@ async def auto_post_loop(bot_instance):
         ("Nekos", get_random_nekos_nsfw, nsfw_channel),
         ("Anime", get_random_anime_image, main_channel),
         ("TikTok", get_random_tiktok, main_channel),
-        ("YouTube", get_random_youtube, main_channel),
         ("Pixabay", get_random_pixabay, main_channel)
     ]
     
@@ -296,24 +259,9 @@ async def auto_post_loop(bot_instance):
         
     import asyncio
     data = await asyncio.to_thread(func)
-    url, topic, title, thumb = data.get("url"), data.get("topic"), data.get("title"), data.get("thumbnail")
+    url, topic = data.get("url"), data.get("topic")
     if not url:
         return
-        
-    if platform == "Anime":
-        embed = create_embed(title="Время контента!", description=f"**Тема:** {topic}", image_url=url, theme="anime")
-    elif platform == "Pixabay":
-        embed = create_embed(title="Красивое фото!", description=f"**Тема:** {topic}", image_url=url, theme="pixabay")
-    elif platform == "Nekos":
-        embed = create_embed(title="18+ Контент!", description=f"**Тема:** {topic}", image_url=url, theme="nekos")
-    elif platform == "TikTok":
-        embed_title = title if title else "Свежий TikTok!"
-        embed = create_embed(title=embed_title, description=f"**Тема:** {topic}\n\n[▶ Открыть TikTok]({url})\n\n{url}", theme="tiktok")
-        if thumb: embed.set_thumbnail(url=thumb)
-    else:
-        embed_title = title if title else "Зацени видео!"
-        embed = create_embed(title=embed_title, description=f"**Тема:** {topic}\n\n[▶ Открыть YouTube]({url})\n\n{url}", theme="youtube")
-        if thumb: embed.set_thumbnail(url=thumb)
         
     download_url = data.get("download_url")
     file_attachment = None
@@ -327,17 +275,14 @@ async def auto_post_loop(bot_instance):
                         video_bytes = await resp.read()
                         if len(video_bytes) < 25 * 1024 * 1024:
                             file_attachment = discord.File(fp=io.BytesIO(video_bytes), filename="video.mp4")
-                            embed.description = f"**Тема:** {topic}"
         except Exception as e:
             print(f"Ошибка загрузки видеофайла в авто-посте: {e}")
             
-    if platform in ["TikTok", "YouTube"]:
-        if file_attachment:
-            await target_channel.send(file=file_attachment)
-        else:
-            await target_channel.send(content=url)
+    content_text = f"**Тема:** {topic}\n{url}"
+    if file_attachment:
+        await target_channel.send(content=f"**Тема:** {topic}", file=file_attachment)
     else:
-        await target_channel.send(embed=embed)
+        await target_channel.send(content=content_text)
 
 @auto_post_loop.before_loop
 async def before_auto_post():
@@ -353,17 +298,15 @@ async def setup(bot):
             
         @commands.Cog.listener()
         async def on_ready(self):
-            # Register persistent views
             self.bot.add_view(SendPlatformView())
-            for plat in ["YouTube", "TikTok", "Pixabay", "Nekos"]:
+            for plat in ["TikTok", "Pixabay", "Nekos"]:
                 self.bot.add_view(TopicSelectView(plat))
                 
             if not auto_post_loop.is_running():
                 cfg = load_config()
-                auto_post_loop.change_interval(hours=cfg.get("auto_post_interval_hours", 2))
+                auto_post_loop.change_interval(minutes=cfg.get("auto_post_interval_minutes", 120))
                 auto_post_loop.start(self.bot)
                 
-        # This acts globally for the cog's app_commands
         async def interaction_check(self, interaction: discord.Interaction) -> bool:
             if interaction.type == discord.InteractionType.application_command and getattr(interaction.command, "name", "") == "send":
                 return True

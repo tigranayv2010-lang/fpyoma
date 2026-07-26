@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 from utils.config import load_topics
 
 load_dotenv()
-YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 PIXABAY_API_KEY = os.getenv('PIXABAY_API_KEY')
 
 def get_random_anime_image() -> dict:
@@ -94,44 +93,3 @@ def get_random_nekos_nsfw(query: str = None) -> dict:
     except Exception as e:
         print(f"Ошибка получения Nekos: {e}")
     return {}
-
-def get_random_youtube(query: str = None) -> dict:
-    topic = query or random.choice(load_topics("YouTube"))
-    search_query = f"{topic} #shorts"
-    url = "https://www.googleapis.com/youtube/v3/search"
-    params = {
-        "part": "snippet",
-        "type": "video",
-        "videoDuration": "short",
-        "maxResults": 20,
-        "q": search_query,
-        "key": YOUTUBE_API_KEY
-    }
-    
-    try:
-        response = requests.get(url, params=params, timeout=5)
-        response.raise_for_status()
-        items = response.json().get('items', [])
-        if items:
-            video = random.choice(items)
-            video_id = video.get('id', {}).get('videoId')
-            if video_id:
-                return {
-                    "url": f"https://www.youtube.com/watch?v={video_id}",
-                    "topic": topic,
-                    "title": video.get("snippet", {}).get("title"),
-                    "thumbnail": video.get("snippet", {}).get("thumbnails", {}).get("high", {}).get("url")
-                }
-    except Exception as e:
-        print(f"Ошибка получения YouTube: {e}")
-    return {}
-
-def search_youtube_interactive(query: str) -> list:
-    url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q={query}&key={YOUTUBE_API_KEY}"
-    try:
-        response = requests.get(url, timeout=5)
-        response.raise_for_status()
-        return response.json().get('items', [])
-    except Exception as e:
-        print(f"Ошибка поиска YouTube: {e}")
-    return []
