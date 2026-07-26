@@ -1,6 +1,4 @@
-discord.py[voice]
+discord.py
 requests
-PyNaCl
-yt-dlp
-imageio-ffmpeg
 python-dotenv
+aiohttp
