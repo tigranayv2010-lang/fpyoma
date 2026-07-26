@@ -27,8 +27,10 @@ async def send_media(channel: discord.TextChannel, data: dict):
                 if resp.status == 200:
                     media_bytes = await resp.read()
                     if len(media_bytes) < 25 * 1024 * 1024:
-                        ext = url.split('?')[0].split('.')[-1]
-                        if len(ext) > 4 or not ext.isalnum(): ext = "jpg"
+                        ext = data.get("ext")
+                        if not ext:
+                            ext = url.split('?')[0].split('.')[-1]
+                            if len(ext) > 4 or not ext.isalnum(): ext = "jpg"
                         file_attachment = discord.File(fp=io.BytesIO(media_bytes), filename=f"media.{ext}")
     except Exception:
         pass

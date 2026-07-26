@@ -38,7 +38,8 @@ def get_random_tiktok(query: str = None) -> dict:
     return {
         "url": f"https://www.tiktok.com/@{author}/video/{vid_id}" if author and vid_id else play_url,
         "topic": topic,
-        "download_url": play_url
+        "download_url": play_url,
+        "ext": "mp4"
     }
 
 def get_random_pixabay(query: str = None) -> dict:
