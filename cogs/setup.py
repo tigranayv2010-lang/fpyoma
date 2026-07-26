@@ -74,9 +74,13 @@ async def setup_command(interaction: discord.Interaction):
         return await interaction.response.send_message(embed=create_embed("Только владелец!", theme="error"), ephemeral=True)
         
     cfg = load_config()
+    main_id = cfg.get('main_channel_id')
+    nsfw_id = cfg.get('nsfw_channel_id')
+    main_str = f"<#{main_id}>" if main_id else "Не установлен"
+    nsfw_str = f"<#{nsfw_id}>" if nsfw_id else "Не установлен"
     desc = (
-        f"📺 **Основной:** <#{cfg.get('main_channel_id')}>" + ("" if cfg.get('main_channel_id') else " Нет") + "\n"
-        f"<:18:1530644654758826155> **NSFW:** <#{cfg.get('nsfw_channel_id')}>" + ("" if cfg.get('nsfw_channel_id') else " Нет") + "\n"
+        f"📺 **Основной:** {main_str}\n"
+        f"<:18:1530644654758826155> **NSFW:** {nsfw_str}\n"
         f"⏱️ **Интервал:** {cfg.get('auto_post_interval_minutes', 120)} мин.\n"
         f"👥 **Роли:** `{', '.join(cfg.get('allowed_roles', ['Content']))}`\n\n"
         "Выберите настройку:"
